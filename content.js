@@ -676,9 +676,18 @@
     const dropdown = panel.querySelector('.xfp-floating-dropdown');
     const closeBtn = panel.querySelector('.xfp-dropdown-close');
 
+    // Restore dropdown open state from storage
+    chrome.storage.local.get('floatingDropdownOpen', (result) => {
+      if (result.floatingDropdownOpen) {
+        dropdown.classList.add('show');
+        updateFloatingPanel();
+      }
+    });
+
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const isShowing = dropdown.classList.toggle('show');
+      chrome.storage.local.set({ floatingDropdownOpen: isShowing });
       if (isShowing) {
         updateFloatingPanel();
       }
@@ -686,6 +695,7 @@
 
     closeBtn.addEventListener('click', () => {
       dropdown.classList.remove('show');
+      chrome.storage.local.set({ floatingDropdownOpen: false });
     });
 
     // Hidden tweets section toggle
