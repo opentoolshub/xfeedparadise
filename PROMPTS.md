@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-08 - PAL MCP with Gemini
+
+Can you use the pal MCP look up how to use it if you need to figure out how to use it with Gemini'
+
+---
+
 ## 2025-12-07 - Prompt Save/Cancel Buttons
 
 They should also be an option to revert to original prompt. Also, maybe there should be a button that requires you to commit a save to the prompt or otherwise hit cancel
