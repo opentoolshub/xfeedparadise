@@ -1,0 +1,924 @@
+// XFeed Paradise - Google News Content Script
+// Monitors Google News feed, extracts articles, and filters based on vibe score
+// Uses the same AI-powered sentiment analysis as the Twitter version
+
+(async function() {
+  'use strict';
+
+  // Feature flag - check if Google News support is enabled
+  const GOOGLE_NEWS_ENABLED_KEY = 'xfp_google_news_enabled';
+
+  // Check feature flag before initializing
+  const flagResult = await chrome.storage.sync.get(GOOGLE_NEWS_ENABLED_KEY);
+  const isEnabled = flagResult[GOOGLE_NEWS_ENABLED_KEY] === true;
+
+  if (!isEnabled) {
+    console.log('🌴 XFeed Paradise: Google News support is disabled. Enable it in settings.');
+    return;
+  }
+
+  console.log('🌴 XFeed Paradise: Initializing for Google News...');
+
+  // Wait for dependencies
+  await window.tweetDB.ready;
+  await VibeFilter.loadSettings();
+  await VibeFilter.loadGroqApiKey();
+
+  // AI Scorer state - uses Groq API
+  let groqApiReady = !!VibeFilter.groqApiKey;
+
+  // Check Groq API status
+  async function checkGroqStatus() {
+    groqApiReady = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
+    return groqApiReady;
+  }
+
+  // Initialize AI (just checks Groq status)
+  async function initAIScorer() {
+    console.log('🌴 XFeed Paradise: Checking Groq API status...');
+    await checkGroqStatus();
+    if (groqApiReady) {
+      console.log('🌴 XFeed Paradise: Groq API ready for AI scoring');
+    } else {
+      console.log('🌴 XFeed Paradise: No Groq API key - using keyword scoring');
+    }
+    updateFloatingPanel();
+  }
+
+  // Local AI scorer is disabled - Groq scoring happens in filter.js
+  window.AIScorer = {
+    get isReady() { return false; },
+    scoreTweet: async () => null
+  };
+  VibeFilter.aiScorer = window.AIScorer;
+
+  // Check Groq status on init
+  if (VibeFilter.settings.useAI !== false) {
+    initAIScorer();
+  }
+
+  // Track processed articles to avoid duplicates
+  const processedArticles = new Set();
+
+  // Track hidden articles with their info
+  let hiddenCount = 0;
+  const hiddenItems = []; // Array of { id, text, source, score, url }
+
+  // Toast notification system
+  let toastTimeout = null;
+  function showToast(message, type = 'info', duration = 4000) {
+    document.querySelector('.xfp-toast')?.remove();
+    if (toastTimeout) clearTimeout(toastTimeout);
+
+    const toast = document.createElement('div');
+    toast.className = `xfp-toast ${type}`;
+
+    const icon = type === 'warning' ? '⚠️' : type === 'error' ? '❌' : '🌴';
+    toast.innerHTML = `<span class="xfp-toast-icon">${icon}</span><span>${message}</span>`;
+
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      toast.classList.add('show');
+    });
+
+    toastTimeout = setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
+  }
+
+  // Hook into VibeFilter for rate limit notifications
+  let lastRateLimitToast = 0;
+  VibeFilter.onRateLimit = (apiName, waitSeconds) => {
+    const now = Date.now();
+    if (now - lastRateLimitToast > 30000) {
+      lastRateLimitToast = now;
+      showToast(`${apiName} rate limited. Using keyword scoring for ${waitSeconds}s`, 'warning', 5000);
+    }
+  };
+
+  // IntersectionObserver for viewport detection
+  const viewportObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        const article = entry.target;
+        if (!article.dataset.xfpProcessed) {
+          processArticle(article);
+        }
+      }
+    }
+  }, {
+    root: null,
+    rootMargin: '200px',
+    threshold: 0
+  });
+
+  // Hash function for generating stable IDs
+  function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  // Extract article data from a Google News article element
+  function extractNewsArticle(element) {
+    try {
+      // Find the article container - Google News uses various structures
+      const article = element.closest('article') ||
+                      element.closest('[data-n-tid]') ||
+                      element.closest('c-wiz[data-n-au]') ||
+                      element;
+
+      if (!article) return null;
+
+      // Find headline - try multiple selectors
+      const headlineEl = article.querySelector('h3') ||
+                         article.querySelector('h4') ||
+                         article.querySelector('[role="heading"]') ||
+                         article.querySelector('a[href*="/articles/"]');
+
+      if (!headlineEl) return null;
+
+      const headline = headlineEl.textContent?.trim();
+      if (!headline || headline.length < 10) return null; // Skip very short headlines
+
+      // Find the article link
+      const linkEl = article.querySelector('a[href*="/articles/"]') ||
+                     article.querySelector('a[href*="/read/"]') ||
+                     article.querySelector('a[href*="news.google.com"]') ||
+                     headlineEl.closest('a') ||
+                     headlineEl.querySelector('a');
+
+      const articleUrl = linkEl?.href || '';
+
+      // Generate stable ID from URL or headline
+      const id = articleUrl ? `gnews-${hashString(articleUrl)}` : `gnews-${hashString(headline)}`;
+
+      // Find snippet/description - usually near the headline
+      let snippet = '';
+
+      // Try to find snippet in various ways
+      const snippetCandidates = [
+        article.querySelector('[data-n-sp]'),
+        headlineEl.parentElement?.nextElementSibling,
+        article.querySelector('div > span:not([role])'),
+      ];
+
+      for (const candidate of snippetCandidates) {
+        if (candidate) {
+          const text = candidate.textContent?.trim();
+          // Skip if it looks like a source name (short) or timestamp
+          if (text && text.length > 30 && !text.match(/^\d+\s*(hour|min|day|week)/i)) {
+            snippet = text;
+            break;
+          }
+        }
+      }
+
+      // Find publication/source name
+      let sourceName = 'Unknown';
+
+      // Look for source indicators
+      const sourceEl = article.querySelector('time')?.parentElement ||
+                       article.querySelector('[data-n-tid]') ||
+                       article.querySelector('a[data-n-tid]');
+
+      if (sourceEl) {
+        // Source is often before the dot or dash
+        const sourceText = sourceEl.textContent?.split(/[·•\-–—]/)[0]?.trim();
+        if (sourceText && sourceText.length < 50) {
+          sourceName = sourceText;
+        }
+      }
+
+      // Find timestamp
+      const timeEl = article.querySelector('time');
+      let timestamp = Date.now();
+      if (timeEl?.dateTime) {
+        timestamp = new Date(timeEl.dateTime).getTime();
+      } else if (timeEl?.textContent) {
+        // Try to parse relative time like "2 hours ago"
+        const relTime = timeEl.textContent;
+        const match = relTime.match(/(\d+)\s*(hour|min|day|week|month)/i);
+        if (match) {
+          const num = parseInt(match[1]);
+          const unit = match[2].toLowerCase();
+          const multipliers = {
+            'min': 60 * 1000,
+            'hour': 60 * 60 * 1000,
+            'day': 24 * 60 * 60 * 1000,
+            'week': 7 * 24 * 60 * 60 * 1000,
+            'month': 30 * 24 * 60 * 60 * 1000
+          };
+          timestamp = Date.now() - (num * (multipliers[unit] || multipliers['hour']));
+        }
+      }
+
+      // Check for image
+      const hasImage = !!article.querySelector('img[src*="http"]');
+
+      // Detect section (for context)
+      let section = null;
+      let parent = article.parentElement;
+      while (parent && parent !== document.body) {
+        const header = parent.querySelector('h2, [role="heading"][aria-level="2"]');
+        if (header) {
+          section = header.textContent?.trim();
+          break;
+        }
+        parent = parent.parentElement;
+      }
+
+      // Build the article object - use same schema as tweets for compatibility
+      return {
+        id,
+        source: 'googlenews',
+        text: snippet ? `${headline}. ${snippet}` : headline, // Combined for scoring
+        headline,
+        snippet,
+        url: articleUrl,
+        timestamp,
+        authorId: sourceName, // Reuse for publication
+        authorName: sourceName,
+        authorAvatar: '',
+        feedOwner: null,
+        metrics: null,
+        media: { hasImage, hasVideo: false, hasQuote: false },
+        isRetweet: null,
+        section,
+        collectedAt: Date.now()
+      };
+    } catch (error) {
+      console.error('XFeed Paradise: Error extracting news article:', error);
+      return null;
+    }
+  }
+
+  // Apply filter to an article element
+  function applyFilter(articleEl, article, score) {
+    if (!VibeFilter.settings.enabled) return;
+
+    const shouldShow = VibeFilter.shouldShow(score);
+    const vibeLabel = VibeFilter.getVibeLabel(score);
+
+    // Remove any existing vibe indicators
+    articleEl.querySelector('.xfp-vibe-indicator')?.remove();
+
+    // Add score indicator if enabled
+    if (VibeFilter.settings.showScores) {
+      const indicator = document.createElement('div');
+      indicator.className = `xfp-vibe-indicator ${vibeLabel.class}`;
+      indicator.innerHTML = `${vibeLabel.label} (${score})`;
+      articleEl.style.position = 'relative';
+      articleEl.prepend(indicator);
+    }
+
+    // Apply filter mode
+    if (!shouldShow) {
+      // Find the best container to hide
+      const container = articleEl.closest('article') ||
+                        articleEl.closest('[data-n-tid]') ||
+                        articleEl.closest('c-wiz') ||
+                        articleEl;
+
+      const wasAlreadyHidden = container?.classList.contains('xfp-hidden') ||
+                               container?.classList.contains('xfp-dimmed') ||
+                               container?.classList.contains('xfp-labeled');
+
+      switch (VibeFilter.settings.filterMode) {
+        case 'hide':
+          container?.classList.add('xfp-hidden');
+          break;
+        case 'dim':
+          container?.classList.add('xfp-dimmed');
+          break;
+        case 'label':
+          container?.classList.add('xfp-labeled');
+          if (!articleEl.querySelector('.xfp-warning-label')) {
+            const warning = document.createElement('div');
+            warning.className = 'xfp-warning-label';
+            warning.innerHTML = `
+              <span>🌴 Hidden by XFeed Paradise: ${vibeLabel.label}</span>
+              <button class="xfp-show-anyway">Show anyway</button>
+            `;
+            warning.querySelector('.xfp-show-anyway').addEventListener('click', (e) => {
+              e.stopPropagation();
+              container?.classList.remove('xfp-labeled');
+              warning.remove();
+              hiddenCount = Math.max(0, hiddenCount - 1);
+            });
+            articleEl.prepend(warning);
+          }
+          break;
+      }
+
+      // Track hidden article info if newly hidden
+      if (!wasAlreadyHidden) {
+        hiddenCount++;
+        hiddenItems.unshift({
+          id: article.id,
+          text: article.headline?.slice(0, 100) + (article.headline?.length > 100 ? '...' : ''),
+          author: article.authorName,
+          authorHandle: article.authorId, // Publication name
+          score: score,
+          url: article.url,
+          vibeLabel: vibeLabel.label
+        });
+        // Keep only last 50
+        if (hiddenItems.length > 50) {
+          hiddenItems.pop();
+        }
+      }
+    } else {
+      // Ensure shown articles are visible
+      const container = articleEl.closest('article') ||
+                        articleEl.closest('[data-n-tid]') ||
+                        articleEl.closest('c-wiz') ||
+                        articleEl;
+      container?.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+    }
+  }
+
+  // Process a single article element
+  function processArticle(articleElement) {
+    const articleContainer = articleElement.closest('article') ||
+                             articleElement.closest('[data-n-tid]') ||
+                             articleElement.closest('c-wiz[data-n-au]') ||
+                             articleElement;
+
+    if (!articleContainer) return;
+
+    // Check if already processed
+    if (articleContainer.dataset.xfpProcessed) {
+      return;
+    }
+
+    const article = extractNewsArticle(articleElement);
+    if (!article) return;
+
+    // Mark as processed
+    articleContainer.dataset.xfpProcessed = 'true';
+    processedArticles.add(article.id);
+
+    // Get score with AI refinement callback
+    const { score, source } = VibeFilter.getScoreWithRefinement(
+      article.id,
+      article.text,
+      (aiScore, aiSource) => {
+        if (articleContainer && articleContainer.isConnected) {
+          article.vibeScore = aiScore;
+          article.scoredWithAI = true;
+          applyFilter(articleContainer, article, aiScore);
+          updateFloatingPanel();
+
+          // Update in database
+          window.tweetDB.saveTweet({ ...article, vibeScore: aiScore, scoredWithAI: true }).catch(() => {});
+        }
+      }
+    );
+
+    article.vibeScore = score;
+    article.scoredWithAI = source === 'ai';
+
+    // Apply filter immediately with initial score
+    applyFilter(articleContainer, article, score);
+
+    // Save to database
+    window.tweetDB.saveTweet(article).catch(error => {
+      console.error('XFeed Paradise: Error saving article:', error);
+    });
+  }
+
+  // Register an article with the viewport observer
+  function registerArticle(element) {
+    if (!element || element.dataset.xfpObserved) return;
+    element.dataset.xfpObserved = 'true';
+    viewportObserver.observe(element);
+    // Also try to process immediately
+    if (!element.dataset.xfpProcessed) {
+      processArticle(element);
+    }
+  }
+
+  // Process all visible articles
+  function processVisibleArticles() {
+    // Google News article selectors
+    const selectors = [
+      'article',
+      'c-wiz[data-n-au]',
+      '[data-n-tid]'
+    ];
+
+    selectors.forEach(selector => {
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(el => registerArticle(el));
+    });
+  }
+
+  // Observe DOM for new articles
+  function observeArticles() {
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check for articles in added nodes
+            const articles = node.querySelectorAll?.('article, c-wiz[data-n-au], [data-n-tid]') || [];
+            articles.forEach(article => registerArticle(article));
+
+            // Check if the node itself is an article
+            if (node.matches?.('article, c-wiz[data-n-au], [data-n-tid]')) {
+              registerArticle(node);
+            }
+          }
+        }
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
+    return observer;
+  }
+
+  // Listen for messages from popup
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'UPDATE_SETTINGS') {
+      VibeFilter.settings = { ...VibeFilter.settings, ...message.settings };
+      reprocessVisibleArticles();
+      sendResponse({ success: true });
+    } else if (message.type === 'CLEAR_DATA') {
+      window.tweetDB.clearAll().then(() => {
+        processedArticles.clear();
+        hiddenCount = 0;
+        hiddenItems.length = 0;
+        updateFloatingPanel();
+        sendResponse({ success: true });
+      }).catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+      return true;
+    } else if (message.type === 'GET_STATS') {
+      window.tweetDB.getStats().then(stats => {
+        sendResponse({
+          stats,
+          processedCount: processedArticles.size,
+          hiddenCount,
+          hiddenTweets: hiddenItems.slice(0, 20) // Keep same field name for popup compatibility
+        });
+      });
+      return true;
+    } else if (message.type === 'GET_AI_STATUS') {
+      sendResponse({
+        aiReady: groqApiReady,
+        aiLoading: !groqApiReady && VibeFilter.settings.useAI,
+        aiProgress: 100
+      });
+    } else if (message.type === 'TOGGLE_ENABLED') {
+      VibeFilter.settings.enabled = message.enabled;
+      reprocessVisibleArticles();
+      sendResponse({ success: true });
+    } else if (message.type === 'UPDATE_FLOATING_VISIBILITY') {
+      const panel = document.querySelector('.xfp-floating-panel');
+      if (panel) {
+        if (message.visible) {
+          panel.classList.remove('hidden');
+        } else {
+          panel.classList.add('hidden');
+        }
+        VibeFilter.settings.floatingHidden = !message.visible;
+      }
+      sendResponse({ success: true });
+    } else if (message.type === 'UPDATE_GROQ_API_KEY') {
+      VibeFilter.groqApiKey = message.apiKey || null;
+      sendResponse({ success: true });
+    } else if (message.type === 'UPDATE_CUSTOM_PROMPT') {
+      VibeFilter.customPrompt = message.prompt || null;
+      sendResponse({ success: true });
+    } else if (message.type === 'GET_GROQ_USAGE') {
+      sendResponse({ usage: VibeFilter.groqUsage });
+    } else if (message.type === 'GET_DEFAULT_PROMPT') {
+      sendResponse({ defaultPrompt: VibeFilter.defaultPrompt });
+    }
+    return true;
+  });
+
+  // Reprocess all visible articles
+  function reprocessVisibleArticles() {
+    const containers = document.querySelectorAll('article, c-wiz[data-n-au], [data-n-tid]');
+    containers.forEach(container => {
+      container.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+      container.querySelector('.xfp-vibe-indicator')?.remove();
+      container.querySelector('.xfp-warning-label')?.remove();
+      container.dataset.xfpProcessed = '';
+      container.dataset.xfpObserved = '';
+    });
+
+    processedArticles.clear();
+    hiddenCount = 0;
+    hiddenItems.length = 0;
+    processVisibleArticles();
+  }
+
+  // Create floating panel UI (adapted from content.js)
+  function createFloatingPanel() {
+    document.querySelector('.xfp-floating-panel')?.remove();
+
+    const position = VibeFilter.settings.floatingPosition || 'bottom-right';
+    const isHidden = VibeFilter.settings.floatingHidden || false;
+
+    const panel = document.createElement('div');
+    panel.className = `xfp-floating-panel pos-${position}`;
+    if (isHidden) panel.classList.add('hidden');
+
+    panel.innerHTML = `
+      <div class="xfp-floating-dropdown">
+        <div class="xfp-dropdown-header">
+          <span class="xfp-dropdown-title">🌴 XFeed Paradise (News)</span>
+          <button class="xfp-dropdown-close">&times;</button>
+        </div>
+
+        <!-- Hidden Articles Section -->
+        <div class="xfp-section">
+          <button class="xfp-section-toggle xfp-hidden-toggle expanded">
+            <span>Hidden Articles <span class="xfp-hidden-count-label">(0)</span></span>
+            <span class="xfp-toggle-icon">▼</span>
+          </button>
+          <div class="xfp-section-content xfp-hidden-content show">
+            <div class="xfp-dropdown-list">
+              <div class="xfp-dropdown-empty">No articles hidden yet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Section -->
+        <div class="xfp-section">
+          <button class="xfp-section-toggle xfp-settings-toggle">
+            <span>Settings & Stats</span>
+            <span class="xfp-toggle-icon">▼</span>
+          </button>
+          <div class="xfp-section-content xfp-settings-content">
+            <!-- Filter Active -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-filter-active-cb" checked>
+                <span>Filter Active</span>
+              </label>
+            </div>
+
+            <!-- Filter Mode -->
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">Filter Mode</label>
+              <div class="xfp-setting-options xfp-filter-modes">
+                <button class="xfp-setting-btn" data-mode="hide">Hide</button>
+                <button class="xfp-setting-btn" data-mode="dim">Dim</button>
+                <button class="xfp-setting-btn" data-mode="label">Collapse</button>
+              </div>
+            </div>
+
+            <!-- Show Scores -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-show-scores-cb">
+                <span>Show vibe scores on articles</span>
+              </label>
+            </div>
+
+            <!-- AI Status & Toggle -->
+            <div class="xfp-setting-row xfp-ai-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-use-ai-cb" checked>
+                <span>Use AI scoring</span>
+              </label>
+              <div class="xfp-ai-status-inline">
+                <span class="xfp-ai-dot"></span>
+                <span class="xfp-ai-text">Loading...</span>
+              </div>
+            </div>
+
+            <div class="xfp-divider"></div>
+
+            <!-- Threshold -->
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">Vibe Threshold</label>
+              <div class="xfp-slider-row">
+                <input type="range" class="xfp-slider xfp-threshold-slider" min="-50" max="50" value="0">
+                <span class="xfp-slider-value xfp-threshold-value">0</span>
+              </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="xfp-setting-row xfp-stats-row">
+              <div class="xfp-stat-item">
+                <span class="xfp-stat-value xfp-stat-hidden">0</span>
+                <span class="xfp-stat-label">Hidden</span>
+              </div>
+              <div class="xfp-stat-item">
+                <span class="xfp-stat-value xfp-stat-processed">0</span>
+                <span class="xfp-stat-label">Processed</span>
+              </div>
+              <div class="xfp-stat-item">
+                <span class="xfp-stat-value xfp-stat-saved">0</span>
+                <span class="xfp-stat-label">Saved</span>
+              </div>
+            </div>
+
+            <div class="xfp-divider"></div>
+
+            <!-- Button Position -->
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">Button Position</label>
+              <div class="xfp-setting-options xfp-positions">
+                <button class="xfp-setting-btn" data-pos="bottom-right">↘</button>
+                <button class="xfp-setting-btn" data-pos="bottom-left">↙</button>
+                <button class="xfp-setting-btn" data-pos="top-right">↗</button>
+                <button class="xfp-setting-btn" data-pos="top-left">↖</button>
+                <button class="xfp-setting-btn" data-pos="middle-right">→</button>
+              </div>
+            </div>
+
+            <!-- Hide Button -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-hide-btn-cb">
+                <span>Hide floating button</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <button class="xfp-floating-btn">
+        <span class="xfp-floating-btn-icon">🌴</span>
+        <span class="xfp-floating-badge">0</span>
+      </button>
+    `;
+
+    document.body.appendChild(panel);
+
+    // Toggle dropdown
+    const btn = panel.querySelector('.xfp-floating-btn');
+    const dropdown = panel.querySelector('.xfp-floating-dropdown');
+    const closeBtn = panel.querySelector('.xfp-dropdown-close');
+
+    chrome.storage.local.get('floatingDropdownOpen', (result) => {
+      if (result.floatingDropdownOpen) {
+        dropdown.classList.add('show');
+        updateFloatingPanel();
+      }
+    });
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isShowing = dropdown.classList.toggle('show');
+      chrome.storage.local.set({ floatingDropdownOpen: isShowing });
+      if (isShowing) {
+        updateFloatingPanel();
+      }
+    });
+
+    closeBtn.addEventListener('click', () => {
+      dropdown.classList.remove('show');
+      chrome.storage.local.set({ floatingDropdownOpen: false });
+    });
+
+    // Hidden section toggle
+    const hiddenToggle = panel.querySelector('.xfp-hidden-toggle');
+    const hiddenContent = panel.querySelector('.xfp-hidden-content');
+
+    hiddenToggle.addEventListener('click', () => {
+      hiddenToggle.classList.toggle('expanded');
+      hiddenContent.classList.toggle('show');
+    });
+
+    // Settings section toggle
+    const settingsToggle = panel.querySelector('.xfp-settings-toggle');
+    const settingsContent = panel.querySelector('.xfp-settings-content');
+
+    settingsToggle.addEventListener('click', () => {
+      settingsToggle.classList.toggle('expanded');
+      settingsContent.classList.toggle('show');
+    });
+
+    // Filter Active checkbox
+    const filterActiveCb = panel.querySelector('.xfp-filter-active-cb');
+    filterActiveCb.addEventListener('change', () => {
+      VibeFilter.settings.enabled = filterActiveCb.checked;
+      VibeFilter.saveSettings({ enabled: filterActiveCb.checked });
+      reprocessVisibleArticles();
+    });
+
+    // Filter mode buttons
+    panel.querySelectorAll('.xfp-filter-modes .xfp-setting-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        panel.querySelectorAll('.xfp-filter-modes .xfp-setting-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        VibeFilter.settings.filterMode = btn.dataset.mode;
+        VibeFilter.saveSettings({ filterMode: btn.dataset.mode });
+        reprocessVisibleArticles();
+      });
+    });
+
+    // Threshold slider
+    const thresholdSlider = panel.querySelector('.xfp-threshold-slider');
+    const thresholdValue = panel.querySelector('.xfp-threshold-value');
+    thresholdSlider.addEventListener('input', () => {
+      thresholdValue.textContent = thresholdSlider.value;
+    });
+    thresholdSlider.addEventListener('change', () => {
+      VibeFilter.settings.threshold = parseInt(thresholdSlider.value);
+      VibeFilter.saveSettings({ threshold: parseInt(thresholdSlider.value) });
+      reprocessVisibleArticles();
+    });
+
+    // Show scores checkbox
+    const showScoresCb = panel.querySelector('.xfp-show-scores-cb');
+    showScoresCb.addEventListener('change', () => {
+      VibeFilter.settings.showScores = showScoresCb.checked;
+      VibeFilter.saveSettings({ showScores: showScoresCb.checked });
+      reprocessVisibleArticles();
+    });
+
+    // Use AI checkbox
+    const useAiCb = panel.querySelector('.xfp-use-ai-cb');
+    useAiCb.addEventListener('change', () => {
+      VibeFilter.settings.useAI = useAiCb.checked;
+      VibeFilter.saveSettings({ useAI: useAiCb.checked });
+      if (useAiCb.checked && !groqApiReady) {
+        initAIScorer();
+      }
+      reprocessVisibleArticles();
+    });
+
+    // Position buttons
+    panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        panel.className = `xfp-floating-panel pos-${btn.dataset.pos}`;
+        VibeFilter.settings.floatingPosition = btn.dataset.pos;
+        VibeFilter.saveSettings({ floatingPosition: btn.dataset.pos });
+      });
+    });
+
+    // Hide button checkbox
+    const hideBtnCb = panel.querySelector('.xfp-hide-btn-cb');
+    hideBtnCb.addEventListener('change', () => {
+      if (hideBtnCb.checked) {
+        panel.classList.add('hidden');
+        VibeFilter.settings.floatingHidden = true;
+        VibeFilter.saveSettings({ floatingHidden: true });
+      }
+    });
+
+    return panel;
+  }
+
+  // Update floating panel content
+  async function updateFloatingPanel() {
+    const panel = document.querySelector('.xfp-floating-panel');
+    if (!panel) return;
+
+    const badge = panel.querySelector('.xfp-floating-badge');
+    const list = panel.querySelector('.xfp-dropdown-list');
+    const aiDot = panel.querySelector('.xfp-ai-dot');
+    const aiText = panel.querySelector('.xfp-ai-text');
+    const hiddenCountLabel = panel.querySelector('.xfp-hidden-count-label');
+
+    // Update badge and hidden count
+    if (badge) {
+      badge.textContent = hiddenCount;
+      badge.style.display = hiddenCount > 0 ? 'flex' : 'none';
+    }
+    if (hiddenCountLabel) {
+      hiddenCountLabel.textContent = `(${hiddenCount})`;
+    }
+
+    // Update AI status
+    if (aiDot && aiText) {
+      const hasGroqKey = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
+      if (VibeFilter.settings.useAI === false) {
+        aiDot.classList.remove('ready');
+        aiText.textContent = 'AI disabled';
+      } else if (hasGroqKey) {
+        aiDot.classList.add('ready');
+        aiText.textContent = 'Groq AI active';
+      } else {
+        aiDot.classList.remove('ready');
+        aiText.textContent = 'Keywords only';
+      }
+    }
+
+    // Update hidden articles list
+    if (list) {
+      if (hiddenItems.length === 0) {
+        list.innerHTML = '<div class="xfp-dropdown-empty">No articles hidden yet</div>';
+      } else {
+        list.innerHTML = hiddenItems.slice(0, 20).map(item => `
+          <div class="xfp-dropdown-item" data-url="${item.url}">
+            <div class="xfp-dropdown-author">${escapeHtml(item.authorHandle)}</div>
+            <div class="xfp-dropdown-text">${escapeHtml(item.text)}</div>
+            <div class="xfp-dropdown-meta">
+              <span>${item.vibeLabel}</span>
+              <span>Score: ${item.score}</span>
+            </div>
+          </div>
+        `).join('');
+
+        // Add click handlers
+        list.querySelectorAll('.xfp-dropdown-item').forEach(item => {
+          item.addEventListener('click', () => {
+            window.open(item.dataset.url, '_blank');
+          });
+        });
+      }
+    }
+
+    // Update filter active checkbox
+    const filterActiveCb = panel.querySelector('.xfp-filter-active-cb');
+    if (filterActiveCb) {
+      filterActiveCb.checked = VibeFilter.settings.enabled !== false;
+    }
+
+    // Update filter mode buttons
+    const filterMode = VibeFilter.settings.filterMode || 'hide';
+    panel.querySelectorAll('.xfp-filter-modes .xfp-setting-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === filterMode);
+    });
+
+    // Update threshold slider
+    const thresholdSlider = panel.querySelector('.xfp-threshold-slider');
+    const thresholdValue = panel.querySelector('.xfp-threshold-value');
+    if (thresholdSlider && thresholdValue) {
+      thresholdSlider.value = VibeFilter.settings.threshold || 0;
+      thresholdValue.textContent = VibeFilter.settings.threshold || 0;
+    }
+
+    // Update show scores checkbox
+    const showScoresCb = panel.querySelector('.xfp-show-scores-cb');
+    if (showScoresCb) {
+      showScoresCb.checked = VibeFilter.settings.showScores || false;
+    }
+
+    // Update use AI checkbox
+    const useAiCb = panel.querySelector('.xfp-use-ai-cb');
+    if (useAiCb) {
+      useAiCb.checked = VibeFilter.settings.useAI !== false;
+    }
+
+    // Update position buttons
+    const position = VibeFilter.settings.floatingPosition || 'bottom-right';
+    panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.pos === position);
+    });
+
+    // Update stats
+    try {
+      const stats = await window.tweetDB.getStats();
+      const statHidden = panel.querySelector('.xfp-stat-hidden');
+      const statProcessed = panel.querySelector('.xfp-stat-processed');
+      const statSaved = panel.querySelector('.xfp-stat-saved');
+
+      if (statHidden) statHidden.textContent = hiddenCount;
+      if (statProcessed) statProcessed.textContent = processedArticles.size;
+      if (statSaved) statSaved.textContent = stats?.tweetCount || 0;
+    } catch (error) {
+      console.warn('Could not update stats:', error);
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  // Create the floating panel
+  const floatingPanel = createFloatingPanel();
+
+  // Update badge periodically
+  const originalHiddenCount = { value: 0 };
+  setInterval(() => {
+    if (originalHiddenCount.value !== hiddenCount) {
+      originalHiddenCount.value = hiddenCount;
+      updateFloatingPanel();
+    }
+  }, 500);
+
+  // Initialize
+  console.log('🌴 XFeed Paradise: Starting article observation...');
+  processVisibleArticles();
+  observeArticles();
+
+  // Log stats periodically
+  setInterval(async () => {
+    const stats = await window.tweetDB.getStats();
+    console.log(`🌴 XFeed Paradise: ${stats.tweetCount} items collected, ${processedArticles.size} processed this session`);
+  }, 60000);
+
+  console.log('🌴 XFeed Paradise: Active and filtering Google News!');
+})();

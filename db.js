@@ -1,6 +1,6 @@
 // IndexedDB wrapper for storing tweets
 const DB_NAME = 'XFeedParadiseDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Bumped for source index
 const TWEETS_STORE = 'tweets';
 const USERS_STORE = 'users';
 
@@ -22,6 +22,7 @@ class TweetDatabase {
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
+        const oldVersion = event.oldVersion;
 
         // Store for tweets
         if (!db.objectStoreNames.contains(TWEETS_STORE)) {
@@ -31,6 +32,14 @@ class TweetDatabase {
           tweetStore.createIndex('collectedAt', 'collectedAt', { unique: false });
           tweetStore.createIndex('feedOwner', 'feedOwner', { unique: false });
           tweetStore.createIndex('vibeScore', 'vibeScore', { unique: false });
+          tweetStore.createIndex('source', 'source', { unique: false }); // For Google News support
+        } else if (oldVersion < 2) {
+          // Upgrade from v1: add source index
+          const transaction = event.target.transaction;
+          const tweetStore = transaction.objectStore(TWEETS_STORE);
+          if (!tweetStore.indexNames.contains('source')) {
+            tweetStore.createIndex('source', 'source', { unique: false });
+          }
         }
 
         // Store for user profiles

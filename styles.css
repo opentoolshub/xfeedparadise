@@ -888,3 +888,76 @@
   margin-top: 8px;
   align-items: center;
 }
+
+/* ========================================
+   Google News Specific Styles
+   ======================================== */
+
+/* Google News filter modes - apply to article containers */
+article.xfp-hidden,
+c-wiz.xfp-hidden,
+[data-n-tid].xfp-hidden {
+  display: none !important;
+}
+
+article.xfp-dimmed,
+c-wiz.xfp-dimmed,
+[data-n-tid].xfp-dimmed {
+  opacity: 0.3 !important;
+  filter: grayscale(80%) !important;
+  transition: opacity 0.3s ease, filter 0.3s ease !important;
+}
+
+article.xfp-dimmed:hover,
+c-wiz.xfp-dimmed:hover,
+[data-n-tid].xfp-dimmed:hover {
+  opacity: 0.8 !important;
+  filter: grayscale(20%) !important;
+}
+
+/* Labeled/collapsed mode for Google News articles */
+article.xfp-labeled,
+c-wiz.xfp-labeled,
+[data-n-tid].xfp-labeled {
+  max-height: 80px !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+article.xfp-labeled::after,
+c-wiz.xfp-labeled::after,
+[data-n-tid].xfp-labeled::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(transparent, var(--background-color, #fff));
+  pointer-events: none;
+}
+
+/* Score badge positioning for Google News cards */
+article .xfp-vibe-indicator,
+c-wiz .xfp-vibe-indicator,
+[data-n-tid] .xfp-vibe-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+}
+
+/* Ensure news cards have relative positioning for badges */
+article:has(.xfp-vibe-indicator),
+c-wiz:has(.xfp-vibe-indicator),
+[data-n-tid]:has(.xfp-vibe-indicator) {
+  position: relative !important;
+}
+
+/* Warning label adjustments for Google News */
+article .xfp-warning-label,
+c-wiz .xfp-warning-label,
+[data-n-tid] .xfp-warning-label {
+  margin: 8px;
+  border-radius: 8px;
+}

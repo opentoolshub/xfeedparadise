@@ -105,6 +105,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     sendToContentScript({ type: 'UPDATE_FLOATING_VISIBILITY', visible: e.target.checked });
   });
 
+  // Google News feature flag
+  const googleNewsToggle = document.getElementById('googleNewsEnabled');
+
+  // Load Google News setting
+  chrome.storage.sync.get('xfp_google_news_enabled', (result) => {
+    googleNewsToggle.checked = result.xfp_google_news_enabled === true;
+  });
+
+  // Save Google News setting
+  googleNewsToggle.addEventListener('change', async (e) => {
+    await chrome.storage.sync.set({ xfp_google_news_enabled: e.target.checked });
+    if (e.target.checked) {
+      showRefreshNotice();
+    }
+  });
+
   document.getElementById('useAI').addEventListener('change', async (e) => {
     await saveSettings({ useAI: e.target.checked });
     sendToContentScript({ type: 'UPDATE_SETTINGS', settings: { useAI: e.target.checked } });
@@ -288,7 +304,12 @@ async function saveSettings(newSettings) {
 
 async function sendToContentScript(message) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && (tab.url?.includes('twitter.com') || tab.url?.includes('x.com'))) {
+  const isSupportedSite = tab && (
+    tab.url?.includes('twitter.com') ||
+    tab.url?.includes('x.com') ||
+    tab.url?.includes('news.google.com')
+  );
+  if (isSupportedSite) {
     try {
       return await chrome.tabs.sendMessage(tab.id, message);
     } catch (error) {
@@ -302,7 +323,12 @@ async function sendToContentScript(message) {
 
 async function updateStats() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && (tab.url?.includes('twitter.com') || tab.url?.includes('x.com'))) {
+  const isSupportedSite = tab && (
+    tab.url?.includes('twitter.com') ||
+    tab.url?.includes('x.com') ||
+    tab.url?.includes('news.google.com')
+  );
+  if (isSupportedSite) {
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATS' });
       if (response) {
@@ -331,7 +357,12 @@ async function updateHiddenTweetsList() {
   const listEl = document.getElementById('hiddenTweetsList');
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && (tab.url?.includes('twitter.com') || tab.url?.includes('x.com'))) {
+  const isSupportedSite = tab && (
+    tab.url?.includes('twitter.com') ||
+    tab.url?.includes('x.com') ||
+    tab.url?.includes('news.google.com')
+  );
+  if (isSupportedSite) {
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATS' });
       if (response && response.hiddenTweets && response.hiddenTweets.length > 0) {
