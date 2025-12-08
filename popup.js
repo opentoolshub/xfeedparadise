@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('thresholdValue').textContent = settings.threshold;
   document.getElementById('showScores').checked = settings.showScores;
   document.getElementById('useAI').checked = settings.useAI !== false;
+  document.getElementById('showFloatingBtn').checked = !settings.floatingHidden;
 
   // Set active mode button
   document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -60,6 +61,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
+  document.getElementById('showFloatingBtn').addEventListener('change', async (e) => {
+    await saveSettings({ floatingHidden: !e.target.checked });
+    sendToContentScript({ type: 'UPDATE_FLOATING_VISIBILITY', visible: e.target.checked });
+  });
+
   document.getElementById('useAI').addEventListener('change', async (e) => {
     await saveSettings({ useAI: e.target.checked });
     sendToContentScript({ type: 'UPDATE_SETTINGS', settings: { useAI: e.target.checked } });
@@ -100,6 +106,8 @@ async function loadSettings() {
         showScores: false,
         filterMode: 'hide',
         useAI: true,
+        floatingHidden: false,
+        floatingPosition: 'bottom-right',
         customPositiveWords: [],
         customNegativeWords: []
       };

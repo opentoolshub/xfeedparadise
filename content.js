@@ -345,6 +345,17 @@
       VibeFilter.settings.enabled = message.enabled;
       reprocessVisibleTweets();
       sendResponse({ success: true });
+    } else if (message.type === 'UPDATE_FLOATING_VISIBILITY') {
+      const panel = document.querySelector('.xfp-floating-panel');
+      if (panel) {
+        if (message.visible) {
+          panel.classList.remove('hidden');
+        } else {
+          panel.classList.add('hidden');
+        }
+        VibeFilter.settings.floatingHidden = !message.visible;
+      }
+      sendResponse({ success: true });
     }
     return true;
   });
@@ -370,12 +381,18 @@
     // Remove existing panel if any
     document.querySelector('.xfp-floating-panel')?.remove();
 
+    // Get saved position
+    const position = VibeFilter.settings.floatingPosition || 'bottom-right';
+    const isHidden = VibeFilter.settings.floatingHidden || false;
+
     const panel = document.createElement('div');
-    panel.className = 'xfp-floating-panel';
+    panel.className = `xfp-floating-panel pos-${position}`;
+    if (isHidden) panel.classList.add('hidden');
+
     panel.innerHTML = `
       <div class="xfp-floating-dropdown">
         <div class="xfp-dropdown-header">
-          <span class="xfp-dropdown-title">🌴 Hidden Tweets</span>
+          <span class="xfp-dropdown-title">🌴 XFeed Paradise</span>
           <button class="xfp-dropdown-close">&times;</button>
         </div>
         <div class="xfp-dropdown-list">
@@ -384,6 +401,51 @@
         <div class="xfp-ai-status">
           <span class="xfp-ai-dot"></span>
           <span class="xfp-ai-text">AI loading...</span>
+        </div>
+        <div class="xfp-settings-section">
+          <button class="xfp-settings-toggle">
+            <span>Settings</span>
+            <span class="xfp-settings-toggle-icon">▼</span>
+          </button>
+          <div class="xfp-settings-content">
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">Filter Mode</label>
+              <div class="xfp-setting-options xfp-filter-modes">
+                <button class="xfp-setting-btn" data-mode="hide">Hide</button>
+                <button class="xfp-setting-btn" data-mode="dim">Dim</button>
+                <button class="xfp-setting-btn" data-mode="label">Collapse</button>
+              </div>
+            </div>
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">Vibe Threshold</label>
+              <div class="xfp-slider-row">
+                <input type="range" class="xfp-slider xfp-threshold-slider" min="-50" max="50" value="0">
+                <span class="xfp-slider-value xfp-threshold-value">0</span>
+              </div>
+            </div>
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-show-scores-cb">
+                <span>Show vibe scores</span>
+              </label>
+            </div>
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">Button Position</label>
+              <div class="xfp-setting-options xfp-positions">
+                <button class="xfp-setting-btn" data-pos="bottom-right">↘</button>
+                <button class="xfp-setting-btn" data-pos="bottom-left">↙</button>
+                <button class="xfp-setting-btn" data-pos="top-right">↗</button>
+                <button class="xfp-setting-btn" data-pos="top-left">↖</button>
+                <button class="xfp-setting-btn" data-pos="middle-right">→</button>
+              </div>
+            </div>
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row xfp-hide-btn-row">
+                <input type="checkbox" class="xfp-hide-btn-cb">
+                <span>Hide floating button</span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
       <button class="xfp-floating-btn">
@@ -410,6 +472,77 @@
       dropdown.classList.remove('show');
     });
 
+    // Settings toggle
+    const settingsToggle = panel.querySelector('.xfp-settings-toggle');
+    const settingsContent = panel.querySelector('.xfp-settings-content');
+
+    // Restore settings expanded state
+    chrome.storage.local.get('floatingSettingsExpanded', (result) => {
+      if (result.floatingSettingsExpanded) {
+        settingsToggle.classList.add('expanded');
+        settingsContent.classList.add('show');
+      }
+    });
+
+    settingsToggle.addEventListener('click', () => {
+      settingsToggle.classList.toggle('expanded');
+      settingsContent.classList.toggle('show');
+      chrome.storage.local.set({ floatingSettingsExpanded: settingsContent.classList.contains('show') });
+    });
+
+    // Filter mode buttons
+    panel.querySelectorAll('.xfp-filter-modes .xfp-setting-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        panel.querySelectorAll('.xfp-filter-modes .xfp-setting-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        VibeFilter.settings.filterMode = btn.dataset.mode;
+        VibeFilter.saveSettings({ filterMode: btn.dataset.mode });
+        reprocessVisibleTweets();
+      });
+    });
+
+    // Threshold slider
+    const thresholdSlider = panel.querySelector('.xfp-threshold-slider');
+    const thresholdValue = panel.querySelector('.xfp-threshold-value');
+    thresholdSlider.addEventListener('input', () => {
+      thresholdValue.textContent = thresholdSlider.value;
+    });
+    thresholdSlider.addEventListener('change', () => {
+      VibeFilter.settings.threshold = parseInt(thresholdSlider.value);
+      VibeFilter.saveSettings({ threshold: parseInt(thresholdSlider.value) });
+      reprocessVisibleTweets();
+    });
+
+    // Show scores checkbox
+    const showScoresCb = panel.querySelector('.xfp-show-scores-cb');
+    showScoresCb.addEventListener('change', () => {
+      VibeFilter.settings.showScores = showScoresCb.checked;
+      VibeFilter.saveSettings({ showScores: showScoresCb.checked });
+      reprocessVisibleTweets();
+    });
+
+    // Position buttons
+    panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        // Update position class
+        panel.className = `xfp-floating-panel pos-${btn.dataset.pos}`;
+        VibeFilter.settings.floatingPosition = btn.dataset.pos;
+        VibeFilter.saveSettings({ floatingPosition: btn.dataset.pos });
+      });
+    });
+
+    // Hide button checkbox
+    const hideBtnCb = panel.querySelector('.xfp-hide-btn-cb');
+    hideBtnCb.addEventListener('change', () => {
+      if (hideBtnCb.checked) {
+        panel.classList.add('hidden');
+        VibeFilter.settings.floatingHidden = true;
+        VibeFilter.saveSettings({ floatingHidden: true });
+      }
+    });
+
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
       if (!panel.contains(e.target)) {
@@ -422,10 +555,13 @@
 
   // Update floating panel content
   function updateFloatingPanel() {
-    const badge = document.querySelector('.xfp-floating-badge');
-    const list = document.querySelector('.xfp-dropdown-list');
-    const aiDot = document.querySelector('.xfp-ai-dot');
-    const aiText = document.querySelector('.xfp-ai-text');
+    const panel = document.querySelector('.xfp-floating-panel');
+    if (!panel) return;
+
+    const badge = panel.querySelector('.xfp-floating-badge');
+    const list = panel.querySelector('.xfp-dropdown-list');
+    const aiDot = panel.querySelector('.xfp-ai-dot');
+    const aiText = panel.querySelector('.xfp-ai-text');
 
     if (badge) {
       badge.textContent = hiddenCount;
@@ -465,6 +601,29 @@
         });
       }
     }
+
+    // Update settings UI to reflect current values
+    const filterMode = VibeFilter.settings.filterMode || 'hide';
+    panel.querySelectorAll('.xfp-filter-modes .xfp-setting-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === filterMode);
+    });
+
+    const thresholdSlider = panel.querySelector('.xfp-threshold-slider');
+    const thresholdValue = panel.querySelector('.xfp-threshold-value');
+    if (thresholdSlider && thresholdValue) {
+      thresholdSlider.value = VibeFilter.settings.threshold || 0;
+      thresholdValue.textContent = VibeFilter.settings.threshold || 0;
+    }
+
+    const showScoresCb = panel.querySelector('.xfp-show-scores-cb');
+    if (showScoresCb) {
+      showScoresCb.checked = VibeFilter.settings.showScores || false;
+    }
+
+    const position = VibeFilter.settings.floatingPosition || 'bottom-right';
+    panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.pos === position);
+    });
   }
 
   function escapeHtml(text) {
