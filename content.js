@@ -712,8 +712,8 @@
     const promptReset = panel.querySelector('.xfp-prompt-reset');
     const promptStatus = panel.querySelector('.xfp-prompt-status');
 
-    // Store original prompt when dropdown opens
-    let originalPrompt = VibeFilter.customPrompt || '';
+    // Store original prompt when dropdown opens - show default if no custom set
+    let originalPrompt = VibeFilter.customPrompt || VibeFilter.defaultPrompt || '';
     promptInputMain.value = originalPrompt;
 
     // Helper to update status text
@@ -759,10 +759,11 @@
 
     // Reset prompt button - revert to default
     promptReset.addEventListener('click', async () => {
-      promptInputMain.value = '';
+      const defaultPrompt = VibeFilter.defaultPrompt || '';
+      promptInputMain.value = defaultPrompt;
       VibeFilter.customPrompt = null;
       await VibeFilter.saveCustomPrompt(null);
-      originalPrompt = '';
+      originalPrompt = defaultPrompt;
       promptMenu.classList.remove('show');
       showToast('Prompt reset to default', 'info', 2000);
     });
