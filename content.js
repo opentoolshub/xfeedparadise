@@ -909,12 +909,8 @@
       }
     });
 
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!panel.contains(e.target)) {
-        dropdown.classList.remove('show');
-      }
-    });
+    // Note: Removed "click outside to close" behavior so dropdown persists during navigation
+    // User can close via palm tree button toggle or X button
 
     return panel;
   }
