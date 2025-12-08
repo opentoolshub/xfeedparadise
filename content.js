@@ -228,39 +228,52 @@
     }
   }
 
-  // Process a single tweet element
-  async function processTweet(tweetElement) {
+  // Process a single tweet element - FAST, non-blocking
+  function processTweet(tweetElement) {
     const tweet = extractTweetData(tweetElement);
     if (!tweet) return;
 
     // Mark as processed early to avoid duplicate processing
     processedTweets.add(tweet.id);
 
-    // Calculate vibe score (async - uses AI when available)
-    const score = await VibeFilter.calculateScore(tweet);
-    tweet.vibeScore = score;
-    tweet.scoredWithAI = groqApiReady;
-
-    // Save to database
-    try {
-      await window.tweetDB.saveTweet(tweet);
-    } catch (error) {
-      console.error('XFeed Paradise: Error saving tweet:', error);
-    }
-
-    // Apply visual filter
     const article = tweetElement.closest('article[data-testid="tweet"]');
+
+    // Get score with AI refinement callback
+    const { score, source } = VibeFilter.getScoreWithRefinement(
+      tweet.id,
+      tweet.text,
+      // Callback when AI score arrives - update the filter
+      (aiScore, aiSource) => {
+        if (article && article.isConnected) {
+          tweet.vibeScore = aiScore;
+          tweet.scoredWithAI = true;
+          applyFilter(article, tweet, aiScore);
+          updateFloatingPanel();
+
+          // Update in database
+          window.tweetDB.saveTweet({ ...tweet, vibeScore: aiScore, scoredWithAI: true }).catch(() => {});
+        }
+      }
+    );
+
+    tweet.vibeScore = score;
+    tweet.scoredWithAI = source === 'ai';
+
+    // Apply filter immediately with initial score
     if (article) {
       applyFilter(article, tweet, score);
     }
+
+    // Save to database (non-blocking)
+    window.tweetDB.saveTweet(tweet).catch(error => {
+      console.error('XFeed Paradise: Error saving tweet:', error);
+    });
   }
 
-  // Process all visible tweets
-  async function processVisibleTweets() {
+  // Process all visible tweets - non-blocking, fires all at once
+  function processVisibleTweets() {
     const tweets = document.querySelectorAll('article[data-testid="tweet"]');
-    for (const tweet of tweets) {
-      await processTweet(tweet);
-    }
+    tweets.forEach(tweet => processTweet(tweet));
   }
 
   // Observe DOM for new tweets
@@ -448,6 +461,14 @@
               <label class="xfp-checkbox-row">
                 <input type="checkbox" class="xfp-show-scores-cb">
                 <span>Show vibe scores on tweets</span>
+              </label>
+            </div>
+
+            <!-- Debug Mode -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-debug-mode-cb">
+                <span>Debug mode (console logs)</span>
               </label>
             </div>
 
@@ -658,6 +679,16 @@
       reprocessVisibleTweets();
     });
 
+    // Debug mode checkbox
+    const debugModeCb = panel.querySelector('.xfp-debug-mode-cb');
+    debugModeCb.addEventListener('change', () => {
+      VibeFilter.settings.debugMode = debugModeCb.checked;
+      VibeFilter.saveSettings({ debugMode: debugModeCb.checked });
+      if (debugModeCb.checked) {
+        console.log('🌴 XFP Debug mode enabled. API status:', VibeFilter.getApiStatus());
+      }
+    });
+
     // Use AI checkbox
     const useAiCb = panel.querySelector('.xfp-use-ai-cb');
     useAiCb.addEventListener('change', () => {
@@ -796,6 +827,12 @@
     const showScoresCb = panel.querySelector('.xfp-show-scores-cb');
     if (showScoresCb) {
       showScoresCb.checked = VibeFilter.settings.showScores || false;
+    }
+
+    // Update debug mode checkbox
+    const debugModeCb = panel.querySelector('.xfp-debug-mode-cb');
+    if (debugModeCb) {
+      debugModeCb.checked = VibeFilter.settings.debugMode || false;
     }
 
     // Update use AI checkbox

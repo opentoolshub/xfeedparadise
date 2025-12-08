@@ -1,5 +1,23 @@
 # User Prompts Log
 
+## 2025-12-07 - Debug Mode and Batching Request
+
+By the way at the very least our app should definitely give descriptive error messages when we hit the rate limit if you're in debug mode with the chrome extension, at least which you should be able to change in settings. And let's batch as many as we can, but like I really want this to work at the speed of scrolling if at all possible if you have an idea about how to do this
+
+---
+
+## 2025-12-07 - Gemini Rate Limits Question
+
+Would there be less for rate limit on Gemini?
+
+---
+
+## 2025-12-07 - Speed Strategy Discussion
+
+But the app needs to go really fast like as fast as I can scroll. Can we strategize about this like is this just the rate limit on the API or is this API even going to work? Let's brainstorm
+
+---
+
 ## 2025-12-07 - Groq Rate Limit Error
 
 As I'm going through the app, I get this error is a rate limit or something Groq API error: 429
