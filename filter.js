@@ -22,6 +22,13 @@ const VibeFilter = {
   groqDefaultKey: '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',
   groqLastRequest: 0,
   groqMinInterval: 2000, // Min 2 seconds between requests (30 RPM limit)
+  groqUsage: {
+    requestsLimit: null,
+    requestsRemaining: null,
+    tokensRemaining: null,
+    requestsReset: null,
+    lastUpdated: null
+  },
 
   // Groq API scorer
   async scoreWithGroq(text) {
@@ -54,6 +61,15 @@ Tweet: "${text.slice(0, 500)}"`
           max_tokens: 10
         })
       });
+
+      // Capture rate limit headers
+      this.groqUsage = {
+        requestsLimit: parseInt(response.headers.get('x-ratelimit-limit-requests')) || null,
+        requestsRemaining: parseInt(response.headers.get('x-ratelimit-remaining-requests')) || null,
+        tokensRemaining: parseInt(response.headers.get('x-ratelimit-remaining-tokens')) || null,
+        requestsReset: response.headers.get('x-ratelimit-reset-requests') || null,
+        lastUpdated: Date.now()
+      };
 
       if (!response.ok) {
         console.warn('Groq API error:', response.status);

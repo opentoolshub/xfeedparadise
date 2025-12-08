@@ -346,6 +346,9 @@
       VibeFilter.groqApiKey = message.apiKey || null;
       console.log('🌴 XFeed Paradise: Groq API key updated');
       sendResponse({ success: true });
+    } else if (message.type === 'GET_GROQ_USAGE') {
+      // Return Groq API usage stats
+      sendResponse({ usage: VibeFilter.groqUsage });
     }
     return true;
   });

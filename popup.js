@@ -149,6 +149,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
+  // Advanced section toggle
+  const advancedToggle = document.getElementById('advancedToggle');
+  const advancedContent = document.getElementById('advancedContent');
+
+  advancedToggle.addEventListener('click', () => {
+    advancedToggle.classList.toggle('expanded');
+    advancedContent.classList.toggle('show');
+    // Fetch usage stats when expanded
+    if (advancedContent.classList.contains('show')) {
+      updateUsageStats();
+    }
+  });
+
+  // Fetch and display Groq usage stats
+  async function updateUsageStats() {
+    const requestsEl = document.getElementById('requestsRemaining');
+    const tokensEl = document.getElementById('tokensRemaining');
+
+    try {
+      const response = await sendToContentScript({ type: 'GET_GROQ_USAGE' });
+      if (response && response.usage) {
+        const usage = response.usage;
+        if (usage.requestsRemaining !== null) {
+          requestsEl.textContent = `${usage.requestsRemaining.toLocaleString()}`;
+        }
+        if (usage.tokensRemaining !== null) {
+          tokensEl.textContent = `${usage.tokensRemaining.toLocaleString()}`;
+        }
+      }
+    } catch (error) {
+      // No usage data yet
+      requestsEl.textContent = 'No data yet';
+      tokensEl.textContent = 'No data yet';
+    }
+  }
+
   function updateApiKeyStatus(apiKey, usingDefault = false) {
     if (apiKey && apiKey.startsWith('gsk_')) {
       apiKeyStatus.textContent = 'Custom API key saved - using Groq';
@@ -208,12 +244,14 @@ async function sendToContentScript(message) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (tab && (tab.url?.includes('twitter.com') || tab.url?.includes('x.com'))) {
     try {
-      await chrome.tabs.sendMessage(tab.id, message);
+      return await chrome.tabs.sendMessage(tab.id, message);
     } catch (error) {
       // Content script might not be loaded yet
       console.log('Could not send message to content script');
+      return null;
     }
   }
+  return null;
 }
 
 async function updateStats() {

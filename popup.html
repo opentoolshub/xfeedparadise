@@ -11,6 +11,8 @@
 
     body {
       width: 320px;
+      max-height: 600px;
+      overflow-y: auto;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
       color: #e2e8f0;
@@ -615,6 +617,69 @@
     .small-toggle input:checked + .toggle-slider:before {
       transform: translateX(18px);
     }
+
+    .advanced-toggle {
+      width: 100%;
+      padding: 8px 0;
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s;
+    }
+
+    .advanced-toggle:hover {
+      color: #94a3b8;
+    }
+
+    .advanced-toggle .toggle-icon {
+      font-size: 8px;
+      transition: transform 0.2s;
+    }
+
+    .advanced-toggle.expanded .toggle-icon {
+      transform: rotate(90deg);
+    }
+
+    .advanced-content {
+      display: none;
+    }
+
+    .advanced-content.show {
+      display: block;
+    }
+
+    .usage-stats {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 8px;
+    }
+
+    .usage-label {
+      font-size: 11px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .usage-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #94a3b8;
+      padding: 3px 0;
+    }
+
+    .usage-row span:last-child {
+      color: #22c55e;
+      font-weight: 500;
+    }
   </style>
 </head>
 <body>
@@ -693,21 +758,39 @@
           <span class="ai-indicator loading"></span>
           <span>Checking...</span>
         </div>
-        <div class="api-key-container">
-          <div class="api-key-label">
-            <span>Groq API Key (free)</span>
-            <a href="https://console.groq.com/keys" target="_blank">Get key</a>
-          </div>
-          <div class="api-key-input-row">
-            <input type="password" id="groqApiKey" class="api-key-input" placeholder="gsk_...">
-            <button id="toggleApiKey" class="api-key-toggle">Show</button>
-          </div>
-          <div id="apiKeyStatus" class="api-key-status">Enter API key for AI scoring</div>
-        </div>
         <label class="checkbox-option">
           <input type="checkbox" id="useAI" checked>
           <span>Use AI-powered scoring</span>
         </label>
+        <!-- Advanced AI Settings (collapsed) -->
+        <button class="advanced-toggle" id="advancedToggle">
+          <span>Advanced</span>
+          <span class="toggle-icon">▶</span>
+        </button>
+        <div class="advanced-content" id="advancedContent">
+          <div class="api-key-container" style="margin-top: 8px;">
+            <div class="api-key-label">
+              <span>Groq API Key (free)</span>
+              <a href="https://console.groq.com/keys" target="_blank">Get key</a>
+            </div>
+            <div class="api-key-input-row">
+              <input type="password" id="groqApiKey" class="api-key-input" placeholder="gsk_...">
+              <button id="toggleApiKey" class="api-key-toggle">Show</button>
+            </div>
+            <div id="apiKeyStatus" class="api-key-status">Using default API key</div>
+          </div>
+          <div class="usage-stats" id="usageStats">
+            <div class="usage-label">API Usage</div>
+            <div class="usage-row">
+              <span>Requests remaining:</span>
+              <span id="requestsRemaining">-</span>
+            </div>
+            <div class="usage-row">
+              <span>Tokens this minute:</span>
+              <span id="tokensRemaining">-</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Stats -->
