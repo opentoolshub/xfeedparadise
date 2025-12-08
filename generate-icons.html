@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate XFeed Paradise Icons</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #1a1a2e; color: white; }
+    canvas { margin: 10px; border: 1px solid #333; }
+    .icons { display: flex; gap: 20px; align-items: end; }
+    button { padding: 10px 20px; margin-top: 20px; }
+    a { color: #8b5cf6; }
+  </style>
+</head>
+<body>
+  <h1>XFeed Paradise Icon Generator</h1>
+  <p>Right-click each canvas and "Save image as..." to save the icons:</p>
+
+  <div class="icons">
+    <div>
+      <canvas id="icon16" width="16" height="16"></canvas>
+      <p>icon16.png</p>
+    </div>
+    <div>
+      <canvas id="icon48" width="48" height="48"></canvas>
+      <p>icon48.png</p>
+    </div>
+    <div>
+      <canvas id="icon128" width="128" height="128"></canvas>
+      <p>icon128.png</p>
+    </div>
+  </div>
+
+  <p style="margin-top: 20px;">Save these to the <code>icons/</code> folder.</p>
+
+  <script>
+    function drawIcon(canvas) {
+      const ctx = canvas.getContext('2d');
+      const size = canvas.width;
+
+      // Gradient background
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#8b5cf6');
+      gradient.addColorStop(1, '#06b6d4');
+
+      // Draw circle
+      ctx.beginPath();
+      ctx.arc(size/2, size/2, size/2 - 1, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Draw palm tree emoji
+      ctx.font = `${size * 0.6}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🌴', size/2, size/2 + size * 0.05);
+    }
+
+    drawIcon(document.getElementById('icon16'));
+    drawIcon(document.getElementById('icon48'));
+    drawIcon(document.getElementById('icon128'));
+  </script>
+</body>
+</html>

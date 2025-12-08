@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+      color: #e2e8f0;
+      padding: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #2d3748;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header .logo {
+      font-size: 24px;
+    }
+
+    .toggle-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+    }
+
+    .toggle-label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .toggle {
+      position: relative;
+      width: 48px;
+      height: 26px;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: #4a5568;
+      border-radius: 13px;
+      transition: 0.3s;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+
+    .toggle input:checked + .toggle-slider {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    }
+
+    .toggle input:checked + .toggle-slider:before {
+      transform: translateX(22px);
+    }
+
+    .section {
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94a3b8;
+      margin-bottom: 8px;
+    }
+
+    .slider-container {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .slider-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .slider-value {
+      color: #a78bfa;
+      font-weight: 600;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #4a5568;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(139, 92, 246, 0.4);
+    }
+
+    .mode-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .mode-btn {
+      flex: 1;
+      padding: 10px 8px;
+      border: 1px solid #4a5568;
+      border-radius: 8px;
+      background: transparent;
+      color: #94a3b8;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-btn:hover {
+      border-color: #6366f1;
+      color: #c4b5fd;
+    }
+
+    .mode-btn.active {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+      border-color: #8b5cf6;
+      color: #c4b5fd;
+    }
+
+    .stats {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .checkbox-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    .checkbox-option input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #8b5cf6;
+    }
+
+    .checkbox-option span {
+      font-size: 13px;
+    }
+
+    .footer {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid #2d3748;
+      text-align: center;
+    }
+
+    .footer a {
+      color: #94a3b8;
+      font-size: 11px;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      color: #c4b5fd;
+    }
+
+    .refresh-notice {
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: #fde047;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .refresh-notice.show {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="logo">🌴</span>
+    <h1>XFeed Paradise</h1>
+  </div>
+
+  <div class="refresh-notice" id="refreshNotice">
+    Refresh the X tab to see changes
+  </div>
+
+  <div class="toggle-section">
+    <span class="toggle-label">Filter Active</span>
+    <label class="toggle">
+      <input type="checkbox" id="enableToggle" checked>
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Vibe Threshold</div>
+    <div class="slider-container">
+      <div class="slider-header">
+        <span>Filter below score:</span>
+        <span class="slider-value" id="thresholdValue">0</span>
+      </div>
+      <input type="range" id="thresholdSlider" min="-50" max="50" value="0">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Filter Mode</div>
+    <div class="mode-buttons">
+      <button class="mode-btn active" data-mode="hide">Hide</button>
+      <button class="mode-btn" data-mode="dim">Dim</button>
+      <button class="mode-btn" data-mode="label">Collapse</button>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Options</div>
+    <label class="checkbox-option">
+      <input type="checkbox" id="showScores">
+      <span>Show vibe scores on tweets</span>
+    </label>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Database Stats</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value" id="tweetCount">-</div>
+        <div class="stat-label">Tweets Saved</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="sessionCount">-</div>
+        <div class="stat-label">This Session</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <a href="#" id="clearData">Clear stored data</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
