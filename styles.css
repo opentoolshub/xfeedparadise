@@ -725,7 +725,18 @@
   font-size: 16px;
 }
 
-/* Custom Prompt Section */
+/* Custom Prompt Section (inline in settings) */
+.xfp-prompt-section-inline {
+  margin-bottom: 12px;
+}
+
+.xfp-prompt-section-inline .xfp-setting-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin-bottom: 6px;
+}
+
 .xfp-prompt-section {
   padding: 12px 16px;
   background: rgba(0, 0, 0, 0.2);
@@ -774,62 +785,107 @@
   color: #ef4444;
 }
 
-.xfp-prompt-actions {
+/* Compact prompt action row */
+.xfp-prompt-actions-row {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
 }
 
 .xfp-prompt-save {
-  flex: 1;
-  padding: 8px 16px;
+  padding: 5px 12px;
   background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   color: white;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .xfp-prompt-save:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
 }
 
 .xfp-prompt-cancel {
-  flex: 1;
-  padding: 8px 16px;
+  padding: 5px 10px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .xfp-prompt-cancel:hover {
-  border-color: rgba(255, 255, 255, 0.4);
+  border-color: rgba(255, 255, 255, 0.3);
   color: #e2e8f0;
+}
+
+/* More options dropdown */
+.xfp-prompt-more {
+  position: relative;
+  margin-left: auto;
+}
+
+.xfp-prompt-more-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #64748b;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.xfp-prompt-more-btn:hover {
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.xfp-prompt-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 4px;
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 140px;
+  z-index: 100;
+}
+
+.xfp-prompt-menu.show {
+  display: block;
 }
 
 .xfp-prompt-reset {
   width: 100%;
-  padding: 6px 12px;
+  padding: 8px 12px;
   background: transparent;
-  border: 1px solid rgba(251, 191, 36, 0.3);
-  border-radius: 6px;
+  border: none;
   color: #fbbf24;
   font-size: 11px;
   cursor: pointer;
+  text-align: left;
   transition: all 0.2s;
-  margin-top: 4px;
 }
 
 .xfp-prompt-reset:hover {
   background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.5);
+}
+
+/* Legacy action wrapper (for backwards compat) */
+.xfp-prompt-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
 }

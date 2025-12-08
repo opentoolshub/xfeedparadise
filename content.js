@@ -525,26 +525,6 @@
           </div>
         </div>
 
-        <!-- Custom Prompt Section (collapsible) -->
-        <div class="xfp-section">
-          <button class="xfp-section-toggle xfp-prompt-toggle">
-            <span>✨ Customize AI Prompt</span>
-            <span class="xfp-toggle-icon">▼</span>
-          </button>
-          <div class="xfp-section-content xfp-prompt-content">
-            <div class="xfp-prompt-section">
-              <div class="xfp-prompt-hint">Tell the AI what kind of tweets you want to see! The AI scores from -100 (hide) to +100 (show).</div>
-              <textarea class="xfp-prompt-input-main" placeholder="Example: Show me tweets about technology, science, and personal growth. Hide political arguments and outrage bait."></textarea>
-              <div class="xfp-prompt-status"></div>
-              <div class="xfp-prompt-actions">
-                <button class="xfp-prompt-save">Save</button>
-                <button class="xfp-prompt-cancel">Cancel</button>
-                <button class="xfp-prompt-reset">Reset to Default</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- All Settings Section (collapsible) -->
         <div class="xfp-section">
           <button class="xfp-section-toggle xfp-settings-toggle">
@@ -567,15 +547,6 @@
                 <button class="xfp-setting-btn" data-mode="hide">Hide</button>
                 <button class="xfp-setting-btn" data-mode="dim">Dim</button>
                 <button class="xfp-setting-btn" data-mode="label">Collapse</button>
-              </div>
-            </div>
-
-            <!-- Threshold -->
-            <div class="xfp-setting-row">
-              <label class="xfp-setting-label">Vibe Threshold</label>
-              <div class="xfp-slider-row">
-                <input type="range" class="xfp-slider xfp-threshold-slider" min="-50" max="50" value="0">
-                <span class="xfp-slider-value xfp-threshold-value">0</span>
               </div>
             </div>
 
@@ -610,15 +581,40 @@
               </button>
             </div>
 
-            <!-- API Key & Prompt Section (Hidden) -->
+            <!-- API Key Section (Hidden under gear) -->
             <div class="xfp-api-key-container">
               <label class="xfp-setting-label">Groq API Key <a href="https://console.groq.com/keys" target="_blank" style="color: #60a5fa; text-decoration: none;">(Get key)</a></label>
               <input type="password" class="xfp-api-input" placeholder="gsk_...">
-              <div class="xfp-setting-label" style="font-size: 10px; opacity: 0.7; margin-top: 4px;">Enter key for faster scoring</div>
-              
-              <label class="xfp-setting-label" style="margin-top: 10px;">Custom Prompt (Optional)</label>
-              <textarea class="xfp-prompt-input" placeholder="Default: Rate the sentiment/vibe..."></textarea>
-              <div class="xfp-setting-label" style="font-size: 10px; opacity: 0.7; margin-top: 4px;">Leave empty to use default. Must ask for a number -100 to 100.</div>
+              <div class="xfp-setting-label" style="font-size: 10px; opacity: 0.7; margin-top: 4px;">Enter key for faster AI scoring</div>
+            </div>
+
+            <div class="xfp-divider"></div>
+
+            <!-- Threshold -->
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">Vibe Threshold</label>
+              <div class="xfp-slider-row">
+                <input type="range" class="xfp-slider xfp-threshold-slider" min="-50" max="50" value="0">
+                <span class="xfp-slider-value xfp-threshold-value">0</span>
+              </div>
+            </div>
+
+            <!-- Custom Prompt Section (at bottom of filter settings) -->
+            <div class="xfp-prompt-section-inline">
+              <label class="xfp-setting-label">✨ Customize AI Prompt</label>
+              <div class="xfp-prompt-hint">Tell the AI what tweets to show!</div>
+              <textarea class="xfp-prompt-input-main" placeholder="Example: Show me tweets about technology, science, and personal growth. Hide political arguments and outrage bait."></textarea>
+              <div class="xfp-prompt-actions-row">
+                <button class="xfp-prompt-save">Save</button>
+                <button class="xfp-prompt-cancel">Cancel</button>
+                <div class="xfp-prompt-more">
+                  <button class="xfp-prompt-more-btn" title="More options">⋯</button>
+                  <div class="xfp-prompt-menu">
+                    <button class="xfp-prompt-reset">Reset to Default</button>
+                  </div>
+                </div>
+              </div>
+              <div class="xfp-prompt-status"></div>
             </div>
 
             <!-- Stats -->
@@ -709,17 +705,16 @@
       chrome.storage.local.set({ floatingHiddenExpanded: hiddenContent.classList.contains('show') });
     });
 
-    // Prompt section toggle
-    const promptToggle = panel.querySelector('.xfp-prompt-toggle');
-    const promptContent = panel.querySelector('.xfp-prompt-content');
+    // Prompt controls (now inside settings section, not separate collapsible)
     const promptInputMain = panel.querySelector('.xfp-prompt-input-main');
     const promptSave = panel.querySelector('.xfp-prompt-save');
     const promptCancel = panel.querySelector('.xfp-prompt-cancel');
     const promptReset = panel.querySelector('.xfp-prompt-reset');
     const promptStatus = panel.querySelector('.xfp-prompt-status');
 
-    // Store original prompt when opening section
-    let originalPrompt = '';
+    // Store original prompt when dropdown opens
+    let originalPrompt = VibeFilter.customPrompt || '';
+    promptInputMain.value = originalPrompt;
 
     // Helper to update status text
     function updatePromptStatus(text, isError = false) {
@@ -731,24 +726,6 @@
         }
       }
     }
-
-    chrome.storage.local.get('floatingPromptExpanded', (result) => {
-      if (result.floatingPromptExpanded) {
-        promptToggle.classList.add('expanded');
-        promptContent.classList.add('show');
-      }
-    });
-
-    promptToggle.addEventListener('click', () => {
-      promptToggle.classList.toggle('expanded');
-      promptContent.classList.toggle('show');
-      chrome.storage.local.set({ floatingPromptExpanded: promptContent.classList.contains('show') });
-      // Load current prompt when expanding and save as original
-      if (promptContent.classList.contains('show')) {
-        originalPrompt = VibeFilter.customPrompt || '';
-        promptInputMain.value = originalPrompt;
-      }
-    });
 
     // Save prompt button
     promptSave.addEventListener('click', async () => {
@@ -766,12 +743,27 @@
       updatePromptStatus('Changes discarded');
     });
 
+    // More options menu toggle
+    const promptMoreBtn = panel.querySelector('.xfp-prompt-more-btn');
+    const promptMenu = panel.querySelector('.xfp-prompt-menu');
+
+    promptMoreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      promptMenu.classList.toggle('show');
+    });
+
+    // Close menu when clicking elsewhere
+    document.addEventListener('click', () => {
+      promptMenu.classList.remove('show');
+    });
+
     // Reset prompt button - revert to default
     promptReset.addEventListener('click', async () => {
       promptInputMain.value = '';
       VibeFilter.customPrompt = null;
       await VibeFilter.saveCustomPrompt(null);
       originalPrompt = '';
+      promptMenu.classList.remove('show');
       showToast('Prompt reset to default', 'info', 2000);
     });
 
@@ -796,15 +788,12 @@
     const gearBtn = panel.querySelector('.xfp-gear-btn');
     const apiKeyContainer = panel.querySelector('.xfp-api-key-container');
     const apiInput = panel.querySelector('.xfp-api-input');
-    const promptInput = panel.querySelector('.xfp-prompt-input');
 
     gearBtn.addEventListener('click', () => {
       apiKeyContainer.classList.toggle('show');
-      // Load current key and prompt when showing
+      // Load current key when showing
       if (apiKeyContainer.classList.contains('show')) {
         apiInput.value = VibeFilter.groqApiKey || '';
-        // Show custom prompt, or default if no custom set
-        promptInput.value = VibeFilter.customPrompt || VibeFilter.defaultPrompt;
       }
     });
 
@@ -814,20 +803,6 @@
       VibeFilter.groqApiKey = newKey;
       await VibeFilter.saveGroqApiKey(newKey);
       initAIScorer();
-    });
-
-    // Custom Prompt input handling
-    promptInput.addEventListener('change', async () => {
-      const newPrompt = promptInput.value.trim();
-      // If user clears it (empty string), we treat as null (use default)
-      const valueToSave = newPrompt === '' ? null : newPrompt;
-      VibeFilter.customPrompt = valueToSave;
-      await VibeFilter.saveCustomPrompt(valueToSave);
-      
-      // If cleared, immediately show default again so they know what's happening
-      if (valueToSave === null) {
-        promptInput.value = VibeFilter.defaultPrompt;
-      }
     });
 
     // Filter Active checkbox
