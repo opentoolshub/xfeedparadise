@@ -525,6 +525,26 @@
           </div>
         </div>
 
+        <!-- Custom Prompt Section (collapsible) -->
+        <div class="xfp-section">
+          <button class="xfp-section-toggle xfp-prompt-toggle">
+            <span>✨ Customize AI Prompt</span>
+            <span class="xfp-toggle-icon">▼</span>
+          </button>
+          <div class="xfp-section-content xfp-prompt-content">
+            <div class="xfp-prompt-section">
+              <div class="xfp-prompt-hint">Tell the AI what kind of tweets you want to see! The AI scores from -100 (hide) to +100 (show).</div>
+              <textarea class="xfp-prompt-input-main" placeholder="Example: Show me tweets about technology, science, and personal growth. Hide political arguments and outrage bait."></textarea>
+              <div class="xfp-prompt-status"></div>
+              <div class="xfp-prompt-actions">
+                <button class="xfp-prompt-save">Save</button>
+                <button class="xfp-prompt-cancel">Cancel</button>
+                <button class="xfp-prompt-reset">Reset to Default</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- All Settings Section (collapsible) -->
         <div class="xfp-section">
           <button class="xfp-section-toggle xfp-settings-toggle">
@@ -660,9 +680,10 @@
     const dropdown = panel.querySelector('.xfp-floating-dropdown');
     const closeBtn = panel.querySelector('.xfp-dropdown-close');
 
-    btn.addEventListener('click', () => {
-      dropdown.classList.toggle('show');
-      if (dropdown.classList.contains('show')) {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isShowing = dropdown.classList.toggle('show');
+      if (isShowing) {
         updateFloatingPanel();
       }
     });
@@ -686,6 +707,72 @@
       hiddenToggle.classList.toggle('expanded');
       hiddenContent.classList.toggle('show');
       chrome.storage.local.set({ floatingHiddenExpanded: hiddenContent.classList.contains('show') });
+    });
+
+    // Prompt section toggle
+    const promptToggle = panel.querySelector('.xfp-prompt-toggle');
+    const promptContent = panel.querySelector('.xfp-prompt-content');
+    const promptInputMain = panel.querySelector('.xfp-prompt-input-main');
+    const promptSave = panel.querySelector('.xfp-prompt-save');
+    const promptCancel = panel.querySelector('.xfp-prompt-cancel');
+    const promptReset = panel.querySelector('.xfp-prompt-reset');
+    const promptStatus = panel.querySelector('.xfp-prompt-status');
+
+    // Store original prompt when opening section
+    let originalPrompt = '';
+
+    // Helper to update status text
+    function updatePromptStatus(text, isError = false) {
+      if (promptStatus) {
+        promptStatus.textContent = text;
+        promptStatus.classList.toggle('error', isError);
+        if (text) {
+          setTimeout(() => { promptStatus.textContent = ''; }, 3000);
+        }
+      }
+    }
+
+    chrome.storage.local.get('floatingPromptExpanded', (result) => {
+      if (result.floatingPromptExpanded) {
+        promptToggle.classList.add('expanded');
+        promptContent.classList.add('show');
+      }
+    });
+
+    promptToggle.addEventListener('click', () => {
+      promptToggle.classList.toggle('expanded');
+      promptContent.classList.toggle('show');
+      chrome.storage.local.set({ floatingPromptExpanded: promptContent.classList.contains('show') });
+      // Load current prompt when expanding and save as original
+      if (promptContent.classList.contains('show')) {
+        originalPrompt = VibeFilter.customPrompt || '';
+        promptInputMain.value = originalPrompt;
+      }
+    });
+
+    // Save prompt button
+    promptSave.addEventListener('click', async () => {
+      const newPrompt = promptInputMain.value.trim();
+      const valueToSave = newPrompt === '' ? null : newPrompt;
+      VibeFilter.customPrompt = valueToSave;
+      await VibeFilter.saveCustomPrompt(valueToSave);
+      originalPrompt = newPrompt; // Update original after save
+      showToast('Custom prompt saved!', 'info', 2000);
+    });
+
+    // Cancel button - revert to original
+    promptCancel.addEventListener('click', () => {
+      promptInputMain.value = originalPrompt;
+      updatePromptStatus('Changes discarded');
+    });
+
+    // Reset prompt button - revert to default
+    promptReset.addEventListener('click', async () => {
+      promptInputMain.value = '';
+      VibeFilter.customPrompt = null;
+      await VibeFilter.saveCustomPrompt(null);
+      originalPrompt = '';
+      showToast('Prompt reset to default', 'info', 2000);
     });
 
     // Settings section toggle

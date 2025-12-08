@@ -1,5 +1,23 @@
 # User Prompts Log
 
+## 2025-12-07 - Prompt Save/Cancel Buttons
+
+They should also be an option to revert to original prompt. Also, maybe there should be a button that requires you to commit a save to the prompt or otherwise hit cancel
+
+---
+
+## 2025-12-07 - Palm Tree Toggle and Dropdown Position
+
+Clicking on the palm tree button should also close the sidebar pop-up. Also the sidebar pop-up should be sure not to go off the top of the page.
+
+---
+
+## 2025-12-07 - Make Custom Prompt More Visible
+
+Let's make it more obvious that you can customize the prompt like we can take that out of the settings thing maybe
+
+---
+
 ## 2025-12-07 - Rate Limit User Feedback
 
 If we hit the API limit, does it give an error the user can see
