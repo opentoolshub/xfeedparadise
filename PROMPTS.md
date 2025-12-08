@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Rate Limit User Feedback
+
+If we hit the API limit, does it give an error the user can see
+
+---
+
 ## 2025-12-07 - Don't Hide on Post Detail Page
 
 It shouldn't hide the post If you're actually clicked directly into a post page Even if it has bad vibes

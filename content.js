@@ -52,6 +52,44 @@
   let hiddenCount = 0;
   const hiddenTweets = []; // Array of { id, text, author, score, url }
 
+  // Toast notification system
+  let toastTimeout = null;
+  function showToast(message, type = 'info', duration = 4000) {
+    // Remove existing toast
+    document.querySelector('.xfp-toast')?.remove();
+    if (toastTimeout) clearTimeout(toastTimeout);
+
+    const toast = document.createElement('div');
+    toast.className = `xfp-toast ${type}`;
+
+    const icon = type === 'warning' ? '⚠️' : type === 'error' ? '❌' : '🌴';
+    toast.innerHTML = `<span class="xfp-toast-icon">${icon}</span><span>${message}</span>`;
+
+    document.body.appendChild(toast);
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+      toast.classList.add('show');
+    });
+
+    // Auto-hide
+    toastTimeout = setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 300);
+    }, duration);
+  }
+
+  // Hook into VibeFilter for rate limit notifications (debounced to prevent spam)
+  let lastRateLimitToast = 0;
+  VibeFilter.onRateLimit = (apiName, waitSeconds) => {
+    const now = Date.now();
+    // Only show toast if it's been at least 30 seconds since last one
+    if (now - lastRateLimitToast > 30000) {
+      lastRateLimitToast = now;
+      showToast(`${apiName} rate limited. Using keyword scoring for ${waitSeconds}s`, 'warning', 5000);
+    }
+  };
+
   // IntersectionObserver for viewport detection - catches fast scrolling & recycled elements
   const viewportObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {

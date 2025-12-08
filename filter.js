@@ -17,6 +17,9 @@ const VibeFilter = {
 
   aiScorer: null,
 
+  // Callback for rate limit notifications (set by content.js)
+  onRateLimit: null,
+
   // API Configuration
   apis: {
     groq: {
@@ -255,12 +258,19 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
         const resetHeader = response.headers.get('x-ratelimit-reset-requests') ||
                            response.headers.get('retry-after');
         const waitTime = this.parseResetTime(resetHeader) || 60000;
+        const waitSeconds = Math.round(waitTime / 1000);
 
-        console.warn(`🌴 XFP: ${api.name} rate limited for ${Math.round(waitTime/1000)}s. Switching to fallback.`);
+        console.warn(`🌴 XFP: ${api.name} rate limited for ${waitSeconds}s. Switching to fallback.`);
         this.debug(`${api.name} rate limited. Reset: ${waitTime}ms`);
 
         api.rateLimited = true;
         api.rateLimitReset = Date.now() + waitTime;
+
+        // Notify UI
+        if (this.onRateLimit) {
+          this.onRateLimit(api.name, waitSeconds);
+        }
+
         return null;
       }
 
