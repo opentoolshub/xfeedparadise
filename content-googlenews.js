@@ -127,29 +127,29 @@
   // Extract article data from a Google News article element
   function extractNewsArticle(element) {
     try {
-      // Find the article container - Google News uses various structures
-      const article = element.closest('article') ||
-                      element.closest('[data-n-tid]') ||
-                      element.closest('c-wiz[data-n-au]') ||
-                      element;
+      // Use the element directly - don't traverse up
+      if (!element) return null;
 
-      if (!article) return null;
+      // Find headline within this element
+      const headlineEl = element.querySelector('h3') ||
+                         element.querySelector('h4') ||
+                         element.querySelector('[role="heading"]') ||
+                         element.querySelector('a[href*="/articles/"]');
 
-      // Find headline - try multiple selectors
-      const headlineEl = article.querySelector('h3') ||
-                         article.querySelector('h4') ||
-                         article.querySelector('[role="heading"]') ||
-                         article.querySelector('a[href*="/articles/"]');
-
-      if (!headlineEl) return null;
+      if (!headlineEl) {
+        console.log('🌴 XFP Debug: No headline found in element', element);
+        return null;
+      }
 
       const headline = headlineEl.textContent?.trim();
-      if (!headline || headline.length < 10) return null; // Skip very short headlines
+      if (!headline || headline.length < 10) {
+        console.log('🌴 XFP Debug: Headline too short:', headline);
+        return null;
+      }
 
       // Find the article link
-      const linkEl = article.querySelector('a[href*="/articles/"]') ||
-                     article.querySelector('a[href*="/read/"]') ||
-                     article.querySelector('a[href*="news.google.com"]') ||
+      const linkEl = element.querySelector('a[href*="/articles/"]') ||
+                     element.querySelector('a[href*="/read/"]') ||
                      headlineEl.closest('a') ||
                      headlineEl.querySelector('a');
 
@@ -163,9 +163,9 @@
 
       // Try to find snippet in various ways
       const snippetCandidates = [
-        article.querySelector('[data-n-sp]'),
+        element.querySelector('[data-n-sp]'),
         headlineEl.parentElement?.nextElementSibling,
-        article.querySelector('div > span:not([role])'),
+        element.querySelector('div > span:not([role])'),
       ];
 
       for (const candidate of snippetCandidates) {
@@ -183,9 +183,9 @@
       let sourceName = 'Unknown';
 
       // Look for source indicators
-      const sourceEl = article.querySelector('time')?.parentElement ||
-                       article.querySelector('[data-n-tid]') ||
-                       article.querySelector('a[data-n-tid]');
+      const sourceEl = element.querySelector('time')?.parentElement ||
+                       element.querySelector('[data-n-tid]') ||
+                       element.querySelector('a[data-n-tid]');
 
       if (sourceEl) {
         // Source is often before the dot or dash
@@ -196,7 +196,7 @@
       }
 
       // Find timestamp
-      const timeEl = article.querySelector('time');
+      const timeEl = element.querySelector('time');
       let timestamp = Date.now();
       if (timeEl?.dateTime) {
         timestamp = new Date(timeEl.dateTime).getTime();
@@ -219,11 +219,11 @@
       }
 
       // Check for image
-      const hasImage = !!article.querySelector('img[src*="http"]');
+      const hasImage = !!element.querySelector('img[src*="http"]');
 
       // Detect section (for context)
       let section = null;
-      let parent = article.parentElement;
+      let parent = element.parentElement;
       while (parent && parent !== document.body) {
         const header = parent.querySelector('h2, [role="heading"][aria-level="2"]');
         if (header) {
@@ -232,6 +232,8 @@
         }
         parent = parent.parentElement;
       }
+
+      console.log('🌴 XFP Debug: Extracted article:', { id, headline: headline.slice(0, 50), sourceName, section });
 
       // Build the article object - use same schema as tweets for compatibility
       return {
@@ -398,6 +400,8 @@
     // This is more reliable than trying to guess article container selectors
     const headlines = document.querySelectorAll('h3 a[href*="/articles/"], h4 a[href*="/articles/"], a[href*="/articles/"] h3, a[href*="/articles/"] h4');
 
+    console.log('🌴 XFP Debug: Found', headlines.length, 'headline links');
+
     headlines.forEach(headline => {
       // Find the closest reasonable container for this headline
       // Go up max 5 levels to find a container, but stop at main/section
@@ -416,9 +420,12 @@
       }
 
       if (container && !container.dataset.xfpObserved) {
+        console.log('🌴 XFP Debug: Registering container for headline:', headline.textContent?.slice(0, 40));
         registerArticle(container);
       }
     });
+
+    console.log('🌴 XFP Debug: Total processed articles:', processedArticles.size);
   }
 
   // Observe DOM for new articles

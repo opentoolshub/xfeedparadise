@@ -105,20 +105,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     sendToContentScript({ type: 'UPDATE_FLOATING_VISIBILITY', visible: e.target.checked });
   });
 
-  // Google News feature flag
+  // Site feature flags
+  const twitterToggle = document.getElementById('twitterEnabled');
   const googleNewsToggle = document.getElementById('googleNewsEnabled');
 
-  // Load Google News setting
-  chrome.storage.sync.get('xfp_google_news_enabled', (result) => {
+  // Load site settings
+  chrome.storage.sync.get(['xfp_twitter_enabled', 'xfp_google_news_enabled'], (result) => {
+    // Twitter defaults to ON
+    twitterToggle.checked = result.xfp_twitter_enabled !== false;
+    // Google News defaults to OFF
     googleNewsToggle.checked = result.xfp_google_news_enabled === true;
+  });
+
+  // Save Twitter setting
+  twitterToggle.addEventListener('change', async (e) => {
+    await chrome.storage.sync.set({ xfp_twitter_enabled: e.target.checked });
+    showRefreshNotice();
   });
 
   // Save Google News setting
   googleNewsToggle.addEventListener('change', async (e) => {
     await chrome.storage.sync.set({ xfp_google_news_enabled: e.target.checked });
-    if (e.target.checked) {
-      showRefreshNotice();
-    }
+    showRefreshNotice();
   });
 
   document.getElementById('useAI').addEventListener('change', async (e) => {

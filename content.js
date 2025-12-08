@@ -5,6 +5,17 @@
 (async function() {
   'use strict';
 
+  // Feature flag - check if Twitter support is enabled (defaults to ON)
+  const TWITTER_ENABLED_KEY = 'xfp_twitter_enabled';
+
+  const flagResult = await chrome.storage.sync.get(TWITTER_ENABLED_KEY);
+  const isEnabled = flagResult[TWITTER_ENABLED_KEY] !== false; // Default to true
+
+  if (!isEnabled) {
+    console.log('🌴 XFeed Paradise: Twitter/X support is disabled.');
+    return;
+  }
+
   console.log('🌴 XFeed Paradise: Initializing...');
 
   // Wait for dependencies
@@ -175,6 +186,7 @@
       // Build tweet object
       const tweet = {
         id: tweetId,
+        source: 'twitter', // Identify source for database filtering
         text: tweetText,
         authorId: authorHandle,
         authorName: displayName,
