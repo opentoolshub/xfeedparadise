@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Prompt Logging Setup
+
+I would like you to head the prompts in prompt. MD every time. Should we put them in claude.MD or something or what's the
+
+---
+
 ## 2024-12-07 - Add AI Scoring
 
 Also, I want it to be doing this using AI. Can we install an AI library to make this work?
@@ -21,3 +27,19 @@ It'll remember whose feed it came from. And have all the meta information on the
 And there can be two versions of this. One merely filters the feed that you already have and basically hides the items that are on your feed that would not do that. And maybe this is the MVP, maybe we start with this here. And maybe it fetches more or something if it needs to, but that's also step one and a half. And then the second version of this app can take the aggregated set of all the users of this app's items and basically bring your own newsfeed, have your own newsfeed algorithm which will surface tweets from this custom shared database, this open Twitter, open X database, which should be viewable elsewhere.
 
 Anyway, maybe. Let's start with the first step of it, the first version of this.
+
+---
+
+# Developer Instructions
+
+## Feature Parity Maintenance
+
+When modifying the UI or functionality of settings, you MUST ensure strict feature parity between the **Extension Popup** (`popup.html` / `popup.js`) and the **Floating Panel** (`content.js` / HTML injected into page).
+
+- **Bi-directional Sync:** Any setting changed in one interface must be reflected in the other. This is primarily handled via `chrome.storage.sync` and message passing.
+- **UI Consistency:** Controls added to one (e.g., the "Custom Prompt" textarea) must be added to the other with similar styling and behavior.
+- **Avoid Cut-off:** When adding content to the Floating Panel, ensure `max-height` in CSS is sufficient (e.g., `80vh`) to prevent content from being cut off at the bottom of the screen.
+
+**Reference Names:**
+- **Extension Popup:** The menu that appears when clicking the extension icon in the Chrome toolbar.
+- **Floating Panel:** The in-page widget (with the palm tree icon) that floats on the X/Twitter interface.
