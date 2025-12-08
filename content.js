@@ -11,61 +11,62 @@
   await window.tweetDB.ready;
   await VibeFilter.loadSettings();
 
-  // Initialize AI Scorer
+  // AI Scorer state (managed via background script)
   let aiScorerReady = false;
   let aiLoadingProgress = 0;
+
+  // Request AI initialization via background script
   async function initAIScorer() {
-    try {
-      console.log('🌴 XFeed Paradise: Loading AI model...');
+    console.log('🌴 XFeed Paradise: Requesting AI initialization...');
+    chrome.runtime.sendMessage({ type: 'INIT_AI_REQUEST' });
 
-      // Dynamic import of transformers.js
-      const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1');
-
-      // Use sentiment analysis pipeline
-      const classifier = await pipeline(
-        'sentiment-analysis',
-        'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
-        { progress_callback: (progress) => {
-          if (progress.status === 'progress') {
-            aiLoadingProgress = Math.round(progress.progress);
+    // Poll for AI status
+    const checkStatus = async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'GET_AI_STATUS_BG' });
+        if (response) {
+          aiLoadingProgress = response.aiProgress || 0;
+          if (response.aiReady) {
+            aiScorerReady = true;
+            console.log('🌴 XFeed Paradise: AI model ready! Reprocessing feed...');
+            reprocessVisibleTweets();
+            return;
+          }
+          if (response.aiLoading) {
             console.log(`🌴 AI Model loading: ${aiLoadingProgress}%`);
+            setTimeout(checkStatus, 1000);
           }
-        }}
-      );
-
-      // Create AI scorer object
-      window.AIScorer = {
-        isReady: true,
-        classifier,
-        async scoreTweet(text) {
-          try {
-            const result = await this.classifier(text.slice(0, 512)); // Limit text length
-            if (result && result[0]) {
-              const { label, score } = result[0];
-              if (label === 'POSITIVE') {
-                return Math.round((score - 0.5) * 200);
-              } else {
-                return Math.round((0.5 - score) * 200);
-              }
-            }
-          } catch (e) {
-            console.error('AI scoring error:', e);
-          }
-          return null;
         }
-      };
+      } catch (error) {
+        console.warn('🌴 AI status check failed:', error);
+      }
+    };
 
-      VibeFilter.aiScorer = window.AIScorer;
-      aiScorerReady = true;
-      console.log('🌴 XFeed Paradise: AI model loaded! Using AI-powered scoring.');
+    checkStatus();
+  }
 
-      // Reprocess visible tweets with AI
-      reprocessVisibleTweets();
+  // Score tweet via background script (which forwards to offscreen doc)
+  async function scoreWithAI(text) {
+    if (!aiScorerReady) return null;
 
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'SCORE_TWEET_REQUEST',
+        text
+      });
+      return response?.score ?? null;
     } catch (error) {
-      console.warn('🌴 XFeed Paradise: AI model failed to load, using keyword scoring:', error.message);
+      console.error('AI scoring error:', error);
+      return null;
     }
   }
+
+  // Create AI scorer interface for filter.js
+  window.AIScorer = {
+    get isReady() { return aiScorerReady; },
+    scoreTweet: scoreWithAI
+  };
+  VibeFilter.aiScorer = window.AIScorer;
 
   // Start loading AI in background (don't block initial filtering)
   if (VibeFilter.settings.useAI !== false) {
@@ -75,8 +76,9 @@
   // Track processed tweets to avoid duplicates
   const processedTweets = new Set();
 
-  // Track hidden tweet count
+  // Track hidden tweets with their info
   let hiddenCount = 0;
+  const hiddenTweets = []; // Array of { id, text, author, score, url }
 
   // Get current user's handle (feed owner)
   function getFeedOwner() {
@@ -230,9 +232,22 @@
           break;
       }
 
-      // Increment hidden count only if newly hidden
+      // Track hidden tweet info if newly hidden
       if (!wasAlreadyHidden) {
         hiddenCount++;
+        hiddenTweets.unshift({
+          id: tweet.id,
+          text: tweet.text?.slice(0, 100) + (tweet.text?.length > 100 ? '...' : ''),
+          author: tweet.authorName || tweet.authorId,
+          authorHandle: tweet.authorId,
+          score: score,
+          url: tweet.url,
+          vibeLabel: vibeLabel.label
+        });
+        // Keep only last 50 hidden tweets
+        if (hiddenTweets.length > 50) {
+          hiddenTweets.pop();
+        }
       }
     } else {
       // Ensure shown tweets are visible
@@ -312,7 +327,12 @@
       sendResponse({ success: true });
     } else if (message.type === 'GET_STATS') {
       window.tweetDB.getStats().then(stats => {
-        sendResponse({ stats, processedCount: processedTweets.size, hiddenCount });
+        sendResponse({
+          stats,
+          processedCount: processedTweets.size,
+          hiddenCount,
+          hiddenTweets: hiddenTweets.slice(0, 20) // Return up to 20 for popup
+        });
       });
       return true; // Keep channel open for async response
     } else if (message.type === 'GET_AI_STATUS') {
@@ -341,6 +361,7 @@
     // Reset counts and reprocess
     processedTweets.clear();
     hiddenCount = 0;
+    hiddenTweets.length = 0;
     processVisibleTweets();
   }
 

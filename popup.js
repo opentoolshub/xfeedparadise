@@ -66,6 +66,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       updateStats();
     }
   });
+
+  // Hidden tweets panel toggle
+  document.getElementById('hiddenStat').addEventListener('click', () => {
+    const panel = document.getElementById('hiddenTweetsPanel');
+    panel.classList.toggle('show');
+    if (panel.classList.contains('show')) {
+      updateHiddenTweetsList();
+    }
+  });
+
+  document.getElementById('closeHiddenPanel').addEventListener('click', () => {
+    document.getElementById('hiddenTweetsPanel').classList.remove('show');
+  });
 });
 
 async function loadSettings() {
@@ -129,6 +142,47 @@ function showRefreshNotice() {
   setTimeout(() => notice.classList.remove('show'), 3000);
 }
 
+async function updateHiddenTweetsList() {
+  const listEl = document.getElementById('hiddenTweetsList');
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab && (tab.url?.includes('twitter.com') || tab.url?.includes('x.com'))) {
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATS' });
+      if (response && response.hiddenTweets && response.hiddenTweets.length > 0) {
+        listEl.innerHTML = response.hiddenTweets.map(tweet => `
+          <div class="hidden-tweet" data-url="${tweet.url}">
+            <div class="hidden-tweet-author">@${tweet.authorHandle}</div>
+            <div class="hidden-tweet-text">${escapeHtml(tweet.text)}</div>
+            <div class="hidden-tweet-meta">
+              <span>${tweet.vibeLabel}</span>
+              <span>Score: ${tweet.score}</span>
+            </div>
+          </div>
+        `).join('');
+
+        // Add click handlers to open tweets
+        listEl.querySelectorAll('.hidden-tweet').forEach(el => {
+          el.addEventListener('click', () => {
+            chrome.tabs.create({ url: el.dataset.url });
+          });
+        });
+        return;
+      }
+    } catch (error) {
+      // Content script not loaded
+    }
+  }
+
+  listEl.innerHTML = '<div class="no-hidden">No tweets hidden yet</div>';
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 async function updateAIStatus() {
   const settings = await loadSettings();
   const statusEl = document.getElementById('aiStatus');
@@ -141,32 +195,31 @@ async function updateAIStatus() {
     return;
   }
 
-  // Query the content script for AI status
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab && (tab.url?.includes('twitter.com') || tab.url?.includes('x.com'))) {
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_AI_STATUS' });
-      if (response) {
-        if (response.aiReady) {
-          indicator.className = 'ai-indicator ready';
-          text.textContent = 'AI model active';
-        } else if (response.aiLoading) {
-          indicator.className = 'ai-indicator loading';
-          const progress = response.aiProgress || 0;
-          text.textContent = `Loading AI model... ${progress}%`;
-          // Poll for updates while loading
-          setTimeout(updateAIStatus, 500);
-        } else {
-          indicator.className = 'ai-indicator error';
-          text.textContent = 'AI unavailable (using keywords)';
-        }
-        return;
+  // Query the background script for AI status
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'GET_AI_STATUS_BG' });
+    if (response) {
+      if (response.aiReady) {
+        indicator.className = 'ai-indicator ready';
+        text.textContent = 'AI model active';
+      } else if (response.aiLoading) {
+        indicator.className = 'ai-indicator loading';
+        const progress = response.aiProgress || 0;
+        text.textContent = `Loading AI model... ${progress}%`;
+        // Poll for updates while loading
+        setTimeout(updateAIStatus, 500);
+      } else {
+        indicator.className = 'ai-indicator error';
+        text.textContent = 'AI initializing...';
+        setTimeout(updateAIStatus, 1000);
       }
-    } catch (error) {
-      // Content script not loaded
+      return;
     }
+  } catch (error) {
+    // Background script not ready
   }
 
   indicator.className = 'ai-indicator loading';
-  text.textContent = 'Open X/Twitter to activate';
+  text.textContent = 'Initializing...';
+  setTimeout(updateAIStatus, 1000);
 }

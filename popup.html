@@ -301,6 +301,102 @@
     .refresh-notice.show {
       display: block;
     }
+
+    .stat-clickable {
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .stat-clickable:hover {
+      transform: scale(1.05);
+    }
+
+    .hint {
+      font-size: 9px;
+      opacity: 0.6;
+    }
+
+    .hidden-tweets-panel {
+      display: none;
+      margin-top: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .hidden-tweets-panel.show {
+      display: block;
+    }
+
+    .hidden-tweets-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 0 4px;
+    }
+
+    .close-btn:hover {
+      color: white;
+    }
+
+    .hidden-tweets-list {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .hidden-tweet {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .hidden-tweet:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .hidden-tweet:last-child {
+      border-bottom: none;
+    }
+
+    .hidden-tweet-author {
+      font-size: 11px;
+      color: #a78bfa;
+      margin-bottom: 2px;
+    }
+
+    .hidden-tweet-text {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.3;
+    }
+
+    .hidden-tweet-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 4px;
+      font-size: 10px;
+      color: #64748b;
+    }
+
+    .no-hidden {
+      padding: 16px;
+      text-align: center;
+      color: #64748b;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
@@ -364,9 +460,9 @@
   <div class="section">
     <div class="section-title">Stats</div>
     <div class="stats three-col">
-      <div class="stat">
+      <div class="stat stat-clickable" id="hiddenStat">
         <div class="stat-value highlight" id="hiddenCount">-</div>
-        <div class="stat-label">Hidden</div>
+        <div class="stat-label">Hidden <span class="hint">(click)</span></div>
       </div>
       <div class="stat">
         <div class="stat-value" id="sessionCount">-</div>
@@ -375,6 +471,17 @@
       <div class="stat">
         <div class="stat-value" id="tweetCount">-</div>
         <div class="stat-label">Saved</div>
+      </div>
+    </div>
+
+    <!-- Hidden tweets list -->
+    <div class="hidden-tweets-panel" id="hiddenTweetsPanel">
+      <div class="hidden-tweets-header">
+        <span>Recently Hidden</span>
+        <button class="close-btn" id="closeHiddenPanel">&times;</button>
+      </div>
+      <div class="hidden-tweets-list" id="hiddenTweetsList">
+        <div class="no-hidden">No tweets hidden yet</div>
       </div>
     </div>
   </div>
