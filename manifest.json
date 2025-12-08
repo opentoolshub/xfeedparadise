@@ -12,7 +12,8 @@
     "https://twitter.com/*",
     "https://x.com/*",
     "https://cdn.jsdelivr.net/*",
-    "https://huggingface.co/*"
+    "https://huggingface.co/*",
+    "https://api.groq.com/*"
   ],
   "action": {
     "default_popup": "popup.html",

@@ -73,9 +73,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
+  // Groq API Key handling
+  const apiKeyInput = document.getElementById('groqApiKey');
+  const toggleApiKeyBtn = document.getElementById('toggleApiKey');
+  const apiKeyStatus = document.getElementById('apiKeyStatus');
+
+  // Load saved API key
+  chrome.storage.sync.get('groqApiKey', (result) => {
+    if (result.groqApiKey) {
+      apiKeyInput.value = result.groqApiKey;
+      updateApiKeyStatus(result.groqApiKey);
+    }
+  });
+
+  // Toggle show/hide API key
+  toggleApiKeyBtn.addEventListener('click', () => {
+    if (apiKeyInput.type === 'password') {
+      apiKeyInput.type = 'text';
+      toggleApiKeyBtn.textContent = 'Hide';
+    } else {
+      apiKeyInput.type = 'password';
+      toggleApiKeyBtn.textContent = 'Show';
+    }
+  });
+
+  // Save API key on change
+  apiKeyInput.addEventListener('change', async () => {
+    const apiKey = apiKeyInput.value.trim();
+    await chrome.storage.sync.set({ groqApiKey: apiKey });
+    updateApiKeyStatus(apiKey);
+    // Notify content script of new API key
+    sendToContentScript({ type: 'UPDATE_GROQ_API_KEY', apiKey });
+    showRefreshNotice();
+  });
+
+  function updateApiKeyStatus(apiKey) {
+    if (apiKey && apiKey.startsWith('gsk_')) {
+      apiKeyStatus.textContent = 'API key saved - using Groq for scoring';
+      apiKeyStatus.className = 'api-key-status connected';
+    } else if (apiKey) {
+      apiKeyStatus.textContent = 'Invalid key format (should start with gsk_)';
+      apiKeyStatus.className = 'api-key-status error';
+    } else {
+      apiKeyStatus.textContent = 'Enter API key for faster, smarter scoring';
+      apiKeyStatus.className = 'api-key-status';
+    }
+  }
+
   document.getElementById('clearData').addEventListener('click', async (e) => {
     e.preventDefault();
     if (confirm('Are you sure you want to clear all stored tweet data?')) {
+      // Clear IndexedDB via content script
+      await sendToContentScript({ type: 'CLEAR_DATA' });
+      // Also clear local storage as backup
       await chrome.storage.local.clear();
       updateStats();
     }

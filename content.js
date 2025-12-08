@@ -10,6 +10,7 @@
   // Wait for dependencies
   await window.tweetDB.ready;
   await VibeFilter.loadSettings();
+  await VibeFilter.loadGroqApiKey();
 
   // AI Scorer state (managed via background script)
   let aiScorerReady = false;
@@ -325,6 +326,19 @@
       // Reprocess visible tweets with new settings
       reprocessVisibleTweets();
       sendResponse({ success: true });
+    } else if (message.type === 'CLEAR_DATA') {
+      // Clear IndexedDB and reset local state
+      window.tweetDB.clearAll().then(() => {
+        processedTweets.clear();
+        hiddenCount = 0;
+        hiddenTweets.length = 0;
+        updateFloatingPanel();
+        sendResponse({ success: true });
+      }).catch(error => {
+        console.error('XFeed Paradise: Error clearing data:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+      return true; // Keep channel open for async response
     } else if (message.type === 'GET_STATS') {
       window.tweetDB.getStats().then(stats => {
         sendResponse({
@@ -355,6 +369,11 @@
         }
         VibeFilter.settings.floatingHidden = !message.visible;
       }
+      sendResponse({ success: true });
+    } else if (message.type === 'UPDATE_GROQ_API_KEY') {
+      // Update Groq API key
+      VibeFilter.groqApiKey = message.apiKey || null;
+      console.log('🌴 XFeed Paradise: Groq API key updated');
       sendResponse({ success: true });
     }
     return true;
@@ -395,19 +414,36 @@
           <span class="xfp-dropdown-title">🌴 XFeed Paradise</span>
           <button class="xfp-dropdown-close">&times;</button>
         </div>
-        <div class="xfp-dropdown-list">
-          <div class="xfp-dropdown-empty">No tweets hidden yet</div>
-        </div>
-        <div class="xfp-ai-status">
-          <span class="xfp-ai-dot"></span>
-          <span class="xfp-ai-text">AI loading...</span>
-        </div>
-        <div class="xfp-settings-section">
-          <button class="xfp-settings-toggle">
-            <span>Settings</span>
-            <span class="xfp-settings-toggle-icon">▼</span>
+
+        <!-- Hidden Tweets Section (collapsible) -->
+        <div class="xfp-section">
+          <button class="xfp-section-toggle xfp-hidden-toggle expanded">
+            <span>Hidden Tweets <span class="xfp-hidden-count-label">(0)</span></span>
+            <span class="xfp-toggle-icon">▼</span>
           </button>
-          <div class="xfp-settings-content">
+          <div class="xfp-section-content xfp-hidden-content show">
+            <div class="xfp-dropdown-list">
+              <div class="xfp-dropdown-empty">No tweets hidden yet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- All Settings Section (collapsible) -->
+        <div class="xfp-section">
+          <button class="xfp-section-toggle xfp-settings-toggle">
+            <span>Settings & Stats</span>
+            <span class="xfp-toggle-icon">▼</span>
+          </button>
+          <div class="xfp-section-content xfp-settings-content">
+            <!-- Filter Active -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-filter-active-cb" checked>
+                <span>Filter Active</span>
+              </label>
+            </div>
+
+            <!-- Filter Mode -->
             <div class="xfp-setting-row">
               <label class="xfp-setting-label">Filter Mode</label>
               <div class="xfp-setting-options xfp-filter-modes">
@@ -416,6 +452,8 @@
                 <button class="xfp-setting-btn" data-mode="label">Collapse</button>
               </div>
             </div>
+
+            <!-- Threshold -->
             <div class="xfp-setting-row">
               <label class="xfp-setting-label">Vibe Threshold</label>
               <div class="xfp-slider-row">
@@ -423,12 +461,47 @@
                 <span class="xfp-slider-value xfp-threshold-value">0</span>
               </div>
             </div>
+
+            <!-- Show Scores -->
             <div class="xfp-setting-row">
               <label class="xfp-checkbox-row">
                 <input type="checkbox" class="xfp-show-scores-cb">
-                <span>Show vibe scores</span>
+                <span>Show vibe scores on tweets</span>
               </label>
             </div>
+
+            <!-- AI Status & Toggle -->
+            <div class="xfp-setting-row xfp-ai-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-use-ai-cb" checked>
+                <span>Use AI scoring</span>
+              </label>
+              <div class="xfp-ai-status-inline">
+                <span class="xfp-ai-dot"></span>
+                <span class="xfp-ai-text">Loading...</span>
+              </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="xfp-setting-row xfp-stats-row">
+              <div class="xfp-stat-item">
+                <span class="xfp-stat-value xfp-stat-hidden">0</span>
+                <span class="xfp-stat-label">Hidden</span>
+              </div>
+              <div class="xfp-stat-item">
+                <span class="xfp-stat-value xfp-stat-processed">0</span>
+                <span class="xfp-stat-label">Processed</span>
+              </div>
+              <div class="xfp-stat-item">
+                <span class="xfp-stat-value xfp-stat-saved">0</span>
+                <span class="xfp-stat-label">Saved</span>
+              </div>
+            </div>
+
+            <!-- Divider -->
+            <div class="xfp-divider"></div>
+
+            <!-- Button Position -->
             <div class="xfp-setting-row">
               <label class="xfp-setting-label">Button Position</label>
               <div class="xfp-setting-options xfp-positions">
@@ -439,11 +512,18 @@
                 <button class="xfp-setting-btn" data-pos="middle-right">→</button>
               </div>
             </div>
+
+            <!-- Hide Button -->
             <div class="xfp-setting-row">
-              <label class="xfp-checkbox-row xfp-hide-btn-row">
+              <label class="xfp-checkbox-row">
                 <input type="checkbox" class="xfp-hide-btn-cb">
                 <span>Hide floating button</span>
               </label>
+            </div>
+
+            <!-- Clear Data -->
+            <div class="xfp-setting-row">
+              <button class="xfp-clear-data-btn">Clear stored data</button>
             </div>
           </div>
         </div>
@@ -472,11 +552,27 @@
       dropdown.classList.remove('show');
     });
 
-    // Settings toggle
+    // Hidden tweets section toggle
+    const hiddenToggle = panel.querySelector('.xfp-hidden-toggle');
+    const hiddenContent = panel.querySelector('.xfp-hidden-content');
+
+    chrome.storage.local.get('floatingHiddenExpanded', (result) => {
+      if (result.floatingHiddenExpanded === false) {
+        hiddenToggle.classList.remove('expanded');
+        hiddenContent.classList.remove('show');
+      }
+    });
+
+    hiddenToggle.addEventListener('click', () => {
+      hiddenToggle.classList.toggle('expanded');
+      hiddenContent.classList.toggle('show');
+      chrome.storage.local.set({ floatingHiddenExpanded: hiddenContent.classList.contains('show') });
+    });
+
+    // Settings section toggle
     const settingsToggle = panel.querySelector('.xfp-settings-toggle');
     const settingsContent = panel.querySelector('.xfp-settings-content');
 
-    // Restore settings expanded state
     chrome.storage.local.get('floatingSettingsExpanded', (result) => {
       if (result.floatingSettingsExpanded) {
         settingsToggle.classList.add('expanded');
@@ -488,6 +584,14 @@
       settingsToggle.classList.toggle('expanded');
       settingsContent.classList.toggle('show');
       chrome.storage.local.set({ floatingSettingsExpanded: settingsContent.classList.contains('show') });
+    });
+
+    // Filter Active checkbox
+    const filterActiveCb = panel.querySelector('.xfp-filter-active-cb');
+    filterActiveCb.addEventListener('change', () => {
+      VibeFilter.settings.enabled = filterActiveCb.checked;
+      VibeFilter.saveSettings({ enabled: filterActiveCb.checked });
+      reprocessVisibleTweets();
     });
 
     // Filter mode buttons
@@ -521,12 +625,22 @@
       reprocessVisibleTweets();
     });
 
+    // Use AI checkbox
+    const useAiCb = panel.querySelector('.xfp-use-ai-cb');
+    useAiCb.addEventListener('change', () => {
+      VibeFilter.settings.useAI = useAiCb.checked;
+      VibeFilter.saveSettings({ useAI: useAiCb.checked });
+      if (useAiCb.checked && !aiScorerReady) {
+        initAIScorer();
+      }
+      reprocessVisibleTweets();
+    });
+
     // Position buttons
     panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        // Update position class
         panel.className = `xfp-floating-panel pos-${btn.dataset.pos}`;
         VibeFilter.settings.floatingPosition = btn.dataset.pos;
         VibeFilter.saveSettings({ floatingPosition: btn.dataset.pos });
@@ -540,6 +654,18 @@
         panel.classList.add('hidden');
         VibeFilter.settings.floatingHidden = true;
         VibeFilter.saveSettings({ floatingHidden: true });
+      }
+    });
+
+    // Clear data button
+    const clearDataBtn = panel.querySelector('.xfp-clear-data-btn');
+    clearDataBtn.addEventListener('click', async () => {
+      if (confirm('Clear all stored tweet data?')) {
+        await window.tweetDB.clearAll();
+        processedTweets.clear();
+        hiddenCount = 0;
+        hiddenTweets.length = 0;
+        updateFloatingPanel();
       }
     });
 

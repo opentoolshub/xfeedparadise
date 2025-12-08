@@ -17,6 +17,73 @@ const VibeFilter = {
   // AI scorer reference (set by content.js)
   aiScorer: null,
 
+  // Groq API key and scorer
+  groqApiKey: null,
+  groqLastRequest: 0,
+  groqMinInterval: 2000, // Min 2 seconds between requests (30 RPM limit)
+
+  // Groq API scorer
+  async scoreWithGroq(text) {
+    if (!this.groqApiKey) return null;
+
+    // Rate limiting - wait if needed
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.groqLastRequest;
+    if (timeSinceLastRequest < this.groqMinInterval) {
+      await new Promise(resolve => setTimeout(resolve, this.groqMinInterval - timeSinceLastRequest));
+    }
+    this.groqLastRequest = Date.now();
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.groqApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{
+            role: 'user',
+            content: `Rate the sentiment/vibe of this tweet from -100 (very negative, toxic, outrage-bait) to +100 (very positive, uplifting, enlightening). Consider: Is it angry/divisive? Does it use inflammatory language? Is it spreading fear or hate? Or is it kind, helpful, educational, or inspiring? Reply with ONLY a single integer number, nothing else.
+
+Tweet: "${text.slice(0, 500)}"`
+          }],
+          temperature: 0,
+          max_tokens: 10
+        })
+      });
+
+      if (!response.ok) {
+        console.warn('Groq API error:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content?.trim();
+      const score = parseInt(content, 10);
+
+      if (!isNaN(score) && score >= -100 && score <= 100) {
+        return score;
+      }
+      console.warn('Groq returned invalid score:', content);
+      return null;
+    } catch (error) {
+      console.error('Groq API error:', error);
+      return null;
+    }
+  },
+
+  // Load Groq API key from storage
+  async loadGroqApiKey() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get('groqApiKey', (result) => {
+        this.groqApiKey = result.groqApiKey || null;
+        resolve(this.groqApiKey);
+      });
+    });
+  },
+
   // Words/phrases that indicate uplifting, enlightening content
   positivePatterns: [
     // Growth & Learning
@@ -169,7 +236,22 @@ const VibeFilter = {
   async calculateScore(tweet) {
     const text = tweet.text || '';
 
-    // Try AI scoring first if enabled and available
+    // Try Groq API first if key is configured
+    if (this.settings.useAI && this.groqApiKey) {
+      try {
+        const groqScore = await this.scoreWithGroq(text);
+        if (groqScore !== null) {
+          // Combine Groq score with keyword adjustments for better accuracy
+          const keywordAdjustment = this.calculateKeywordScore(text) * 0.2;
+          const combinedScore = Math.round(groqScore * 0.8 + keywordAdjustment);
+          return Math.max(-100, Math.min(100, combinedScore));
+        }
+      } catch (error) {
+        console.error('Groq scoring failed, falling back:', error);
+      }
+    }
+
+    // Try local AI scoring if enabled and available
     if (this.settings.useAI && this.aiScorer && this.aiScorer.isReady) {
       try {
         const aiScore = await this.aiScorer.scoreTweet(text);
