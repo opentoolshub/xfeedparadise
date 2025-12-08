@@ -239,7 +239,7 @@
     // Calculate vibe score (async - uses AI when available)
     const score = await VibeFilter.calculateScore(tweet);
     tweet.vibeScore = score;
-    tweet.scoredWithAI = aiScorerReady;
+    tweet.scoredWithAI = groqApiReady;
 
     // Save to database
     try {
@@ -322,9 +322,9 @@
       return true; // Keep channel open for async response
     } else if (message.type === 'GET_AI_STATUS') {
       sendResponse({
-        aiReady: aiScorerReady,
-        aiLoading: !aiScorerReady && VibeFilter.settings.useAI,
-        aiProgress: aiLoadingProgress
+        aiReady: groqApiReady,
+        aiLoading: !groqApiReady && VibeFilter.settings.useAI,
+        aiProgress: 100
       });
     } else if (message.type === 'TOGGLE_ENABLED') {
       VibeFilter.settings.enabled = message.enabled;
@@ -346,9 +346,16 @@
       VibeFilter.groqApiKey = message.apiKey || null;
       console.log('🌴 XFeed Paradise: Groq API key updated');
       sendResponse({ success: true });
+    } else if (message.type === 'UPDATE_CUSTOM_PROMPT') {
+      // Update Custom Prompt
+      VibeFilter.customPrompt = message.prompt || null;
+      console.log('🌴 XFeed Paradise: Custom prompt updated');
+      sendResponse({ success: true });
     } else if (message.type === 'GET_GROQ_USAGE') {
       // Return Groq API usage stats
       sendResponse({ usage: VibeFilter.groqUsage });
+    } else if (message.type === 'GET_DEFAULT_PROMPT') {
+      sendResponse({ defaultPrompt: VibeFilter.defaultPrompt });
     }
     return true;
   });
@@ -454,6 +461,20 @@
                 <span class="xfp-ai-dot"></span>
                 <span class="xfp-ai-text">Loading...</span>
               </div>
+              <button class="xfp-gear-btn" title="AI Settings">
+                <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+              </button>
+            </div>
+
+            <!-- API Key & Prompt Section (Hidden) -->
+            <div class="xfp-api-key-container">
+              <label class="xfp-setting-label">Groq API Key <a href="https://console.groq.com/keys" target="_blank" style="color: #60a5fa; text-decoration: none;">(Get key)</a></label>
+              <input type="password" class="xfp-api-input" placeholder="gsk_...">
+              <div class="xfp-setting-label" style="font-size: 10px; opacity: 0.7; margin-top: 4px;">Enter key for faster scoring</div>
+              
+              <label class="xfp-setting-label" style="margin-top: 10px;">Custom Prompt (Optional)</label>
+              <textarea class="xfp-prompt-input" placeholder="Default: Rate the sentiment/vibe..."></textarea>
+              <div class="xfp-setting-label" style="font-size: 10px; opacity: 0.7; margin-top: 4px;">Leave empty to use default. Must ask for a number -100 to 100.</div>
             </div>
 
             <!-- Stats -->
@@ -560,6 +581,44 @@
       chrome.storage.local.set({ floatingSettingsExpanded: settingsContent.classList.contains('show') });
     });
 
+    // Gear button (API Key) toggle
+    const gearBtn = panel.querySelector('.xfp-gear-btn');
+    const apiKeyContainer = panel.querySelector('.xfp-api-key-container');
+    const apiInput = panel.querySelector('.xfp-api-input');
+    const promptInput = panel.querySelector('.xfp-prompt-input');
+
+    gearBtn.addEventListener('click', () => {
+      apiKeyContainer.classList.toggle('show');
+      // Load current key and prompt when showing
+      if (apiKeyContainer.classList.contains('show')) {
+        apiInput.value = VibeFilter.groqApiKey || '';
+        // Show custom prompt, or default if no custom set
+        promptInput.value = VibeFilter.customPrompt || VibeFilter.defaultPrompt;
+      }
+    });
+
+    // API Key input handling
+    apiInput.addEventListener('change', async () => {
+      const newKey = apiInput.value.trim();
+      VibeFilter.groqApiKey = newKey;
+      await VibeFilter.saveGroqApiKey(newKey);
+      initAIScorer();
+    });
+
+    // Custom Prompt input handling
+    promptInput.addEventListener('change', async () => {
+      const newPrompt = promptInput.value.trim();
+      // If user clears it (empty string), we treat as null (use default)
+      const valueToSave = newPrompt === '' ? null : newPrompt;
+      VibeFilter.customPrompt = valueToSave;
+      await VibeFilter.saveCustomPrompt(valueToSave);
+      
+      // If cleared, immediately show default again so they know what's happening
+      if (valueToSave === null) {
+        promptInput.value = VibeFilter.defaultPrompt;
+      }
+    });
+
     // Filter Active checkbox
     const filterActiveCb = panel.querySelector('.xfp-filter-active-cb');
     filterActiveCb.addEventListener('change', () => {
@@ -604,7 +663,7 @@
     useAiCb.addEventListener('change', () => {
       VibeFilter.settings.useAI = useAiCb.checked;
       VibeFilter.saveSettings({ useAI: useAiCb.checked });
-      if (useAiCb.checked && !aiScorerReady) {
+      if (useAiCb.checked && !groqApiReady) {
         initAIScorer();
       }
       reprocessVisibleTweets();

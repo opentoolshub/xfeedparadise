@@ -11,12 +11,13 @@
 
     body {
       width: 320px;
-      max-height: 600px;
-      overflow-y: auto;
+      min-height: 400px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+      background-attachment: fixed;
       color: #e2e8f0;
       padding: 16px;
+      padding-bottom: 24px;
     }
 
     .header {
@@ -618,31 +619,13 @@
       transform: translateX(18px);
     }
 
-    .advanced-toggle {
-      width: 100%;
-      padding: 8px 0;
-      background: none;
-      border: none;
-      color: #64748b;
-      font-size: 12px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: color 0.2s;
-    }
-
-    .advanced-toggle:hover {
-      color: #94a3b8;
-    }
-
-    .advanced-toggle .toggle-icon {
-      font-size: 8px;
-      transition: transform 0.2s;
-    }
-
-    .advanced-toggle.expanded .toggle-icon {
+    .gear-btn.expanded svg {
       transform: rotate(90deg);
+      color: #8b5cf6;
+    }
+    
+    .gear-btn svg {
+      transition: transform 0.3s;
     }
 
     .advanced-content {
@@ -679,6 +662,30 @@
     .usage-row span:last-child {
       color: #22c55e;
       font-weight: 500;
+    }
+
+    .gear-btn {
+      background: transparent;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .gear-btn:hover {
+      color: #e2e8f0;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .gear-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
     }
   </style>
 </head>
@@ -753,7 +760,12 @@
 
       <!-- AI Section -->
       <div class="section" style="margin-bottom: 12px; margin-top: 12px;">
-        <div class="section-title">AI Scoring</div>
+        <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>AI Scoring</span>
+          <button class="gear-btn" id="advancedToggle" title="AI Settings">
+            <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          </button>
+        </div>
         <div class="ai-status" id="aiStatus">
           <span class="ai-indicator loading"></span>
           <span>Checking...</span>
@@ -762,11 +774,8 @@
           <input type="checkbox" id="useAI" checked>
           <span>Use AI-powered scoring</span>
         </label>
-        <!-- Advanced AI Settings (collapsed) -->
-        <button class="advanced-toggle" id="advancedToggle">
-          <span>Advanced</span>
-          <span class="toggle-icon">▶</span>
-        </button>
+        
+        <!-- Advanced AI Settings (hidden by default) -->
         <div class="advanced-content" id="advancedContent">
           <div class="api-key-container" style="margin-top: 8px;">
             <div class="api-key-label">
@@ -778,6 +787,12 @@
               <button id="toggleApiKey" class="api-key-toggle">Show</button>
             </div>
             <div id="apiKeyStatus" class="api-key-status">Using default API key</div>
+            
+            <div class="api-key-label" style="margin-top: 10px;">
+              <span>Custom Prompt (Optional)</span>
+            </div>
+            <textarea id="customPrompt" class="api-key-input" style="height: 60px; resize: vertical; font-family: monospace;" placeholder="Default: Rate the sentiment/vibe..."></textarea>
+            <div class="hint" style="margin-top: 4px; color: #64748b;">Leave empty to use default. Must ask for a number -100 to 100.</div>
           </div>
           <div class="usage-stats" id="usageStats">
             <div class="usage-label">API Usage</div>

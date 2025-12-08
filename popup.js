@@ -116,15 +116,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   const apiKeyInput = document.getElementById('groqApiKey');
   const toggleApiKeyBtn = document.getElementById('toggleApiKey');
   const apiKeyStatus = document.getElementById('apiKeyStatus');
+  const customPromptInput = document.getElementById('customPrompt');
 
-  // Load saved API key
-  chrome.storage.sync.get('groqApiKey', (result) => {
+  // Load saved API key and Custom Prompt
+  chrome.storage.sync.get(['groqApiKey', 'customPrompt'], (result) => {
     if (result.groqApiKey) {
       apiKeyInput.value = result.groqApiKey;
       updateApiKeyStatus(result.groqApiKey);
     } else {
       // Show that default key is being used
       updateApiKeyStatus(null, true);
+    }
+    
+    // Load custom prompt or use default placeholder logic
+    // We don't have direct access to the default prompt string here easily without duplicating it or messaging content script.
+    // However, to satisfy "show the default prompt", we can fetch it from content script or hardcode it since it's constant.
+    // Better to fetch to keep DRY.
+    if (result.customPrompt) {
+      customPromptInput.value = result.customPrompt;
+    } else {
+      // Fetch default prompt from content script
+      sendToContentScript({ type: 'GET_DEFAULT_PROMPT' }).then(response => {
+        if (response && response.defaultPrompt) {
+          customPromptInput.placeholder = `Default: ${response.defaultPrompt.substring(0, 50)}...`;
+          // If the user wants to see the full default, we could maybe set it as value? 
+          // The request said "show the default prompt that we're using".
+          // If value is empty, showing placeholder is standard, but maybe pre-filling it is better?
+          // Let's rely on the placeholder for now, or fetch full default on focus?
+          // Actually, let's leave it blank with placeholder, but if they want to edit, they usually copy default.
+          // Wait, requirement: "show the default prompt that we're using".
+          // If I just set the value to the default prompt when it's null, that works best.
+          customPromptInput.value = response.defaultPrompt;
+        }
+      });
     }
   });
 
@@ -146,6 +170,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateApiKeyStatus(apiKey);
     // Notify content script of new API key
     sendToContentScript({ type: 'UPDATE_GROQ_API_KEY', apiKey });
+    showRefreshNotice();
+  });
+
+  // Save Custom Prompt on change
+  customPromptInput.addEventListener('change', async () => {
+    const prompt = customPromptInput.value.trim();
+    // If user clears it, we save null so default is used next time (or immediately)
+    // But we also want to restore the default text visually if they clear it?
+    // Let's just save what they typed.
+    // If they explicitly clear it (empty string), we treat as null.
+    const valueToSave = prompt === '' ? null : prompt;
+    
+    await chrome.storage.sync.set({ customPrompt: valueToSave });
+    sendToContentScript({ type: 'UPDATE_CUSTOM_PROMPT', prompt: valueToSave });
+    
+    // If cleared, re-fetch default to show it
+    if (valueToSave === null) {
+       const response = await sendToContentScript({ type: 'GET_DEFAULT_PROMPT' });
+       if (response && response.defaultPrompt) {
+         customPromptInput.value = response.defaultPrompt;
+       }
+    }
     showRefreshNotice();
   });
 
@@ -334,16 +380,16 @@ async function updateAIStatus() {
     return;
   }
 
-  // Check if Groq API key is configured
+  // Default key is always available, so Groq is always active
+  // Only show custom key status if user has entered one
   chrome.storage.sync.get('groqApiKey', (result) => {
-    const hasGroqKey = !!(result.groqApiKey && result.groqApiKey.startsWith('gsk_'));
-
-    if (hasGroqKey) {
+    if (result.groqApiKey && result.groqApiKey.startsWith('gsk_')) {
+      indicator.className = 'ai-indicator ready';
+      text.textContent = 'Groq AI active (custom key)';
+    } else {
+      // Using default key - still active
       indicator.className = 'ai-indicator ready';
       text.textContent = 'Groq AI active';
-    } else {
-      indicator.className = 'ai-indicator error';
-      text.textContent = 'Add API key for AI scoring';
     }
   });
 }

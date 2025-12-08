@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Filtering Not Working
+
+Also, can you look at the app and figure out why when I'm using it? It's not actually working like it's not hiding or filtering anything
+
+---
+
 ## 2025-12-07 - Local Project Only
 
 I wanted it only for our local file our local project not uni

@@ -20,6 +20,7 @@ const VibeFilter = {
   // Groq API key and scorer
   groqApiKey: null,
   groqDefaultKey: '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',
+  customPrompt: null,
   groqLastRequest: 0,
   groqMinInterval: 2000, // Min 2 seconds between requests (30 RPM limit)
   groqUsage: {
@@ -29,6 +30,9 @@ const VibeFilter = {
     requestsReset: null,
     lastUpdated: null
   },
+
+  // Default system prompt
+  defaultPrompt: `Rate the sentiment/vibe of this tweet from -100 (very negative, toxic, outrage-bait) to +100 (very positive, uplifting, enlightening). Consider: Is it angry/divisive? Does it use inflammatory language? Is it spreading fear or hate? Or is it kind, helpful, educational, or inspiring? Reply with ONLY a single integer number, nothing else.`,
 
   // Groq API scorer
   async scoreWithGroq(text) {
@@ -42,6 +46,9 @@ const VibeFilter = {
     }
     this.groqLastRequest = Date.now();
 
+    // Use custom prompt if available, otherwise default
+    const promptText = this.customPrompt || this.defaultPrompt;
+
     try {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -53,9 +60,7 @@ const VibeFilter = {
           model: 'llama-3.1-8b-instant',
           messages: [{
             role: 'user',
-            content: `Rate the sentiment/vibe of this tweet from -100 (very negative, toxic, outrage-bait) to +100 (very positive, uplifting, enlightening). Consider: Is it angry/divisive? Does it use inflammatory language? Is it spreading fear or hate? Or is it kind, helpful, educational, or inspiring? Reply with ONLY a single integer number, nothing else.
-
-Tweet: "${text.slice(0, 500)}"`
+            content: `${promptText}\n\nTweet: "${text.slice(0, 500)}"`
           }],
           temperature: 0,
           max_tokens: 10
@@ -91,13 +96,28 @@ Tweet: "${text.slice(0, 500)}"`
     }
   },
 
-  // Load Groq API key from storage (falls back to default key)
+  // Load Groq API key and prompt from storage
   async loadGroqApiKey() {
     return new Promise((resolve) => {
-      chrome.storage.sync.get('groqApiKey', (result) => {
+      chrome.storage.sync.get(['groqApiKey', 'customPrompt'], (result) => {
         this.groqApiKey = result.groqApiKey || this.groqDefaultKey;
-        resolve(this.groqApiKey);
+        this.customPrompt = result.customPrompt || null;
+        resolve({ apiKey: this.groqApiKey, customPrompt: this.customPrompt });
       });
+    });
+  },
+
+  async saveGroqApiKey(key) {
+    this.groqApiKey = key;
+    return new Promise((resolve) => {
+      chrome.storage.sync.set({ groqApiKey: key }, resolve);
+    });
+  },
+
+  async saveCustomPrompt(prompt) {
+    this.customPrompt = prompt;
+    return new Promise((resolve) => {
+      chrome.storage.sync.set({ customPrompt: prompt }, resolve);
     });
   },
 

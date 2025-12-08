@@ -101,16 +101,18 @@
   bottom: 80px;
   right: 0;
   width: 320px;
-  max-height: 400px;
+  max-height: 80vh;
   background: #1a1a2e;
   border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   display: none;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .xfp-floating-dropdown.show {
-  display: block;
+  display: flex;
 }
 
 .xfp-dropdown-header {
@@ -429,7 +431,8 @@
 /* AI status inline */
 .xfp-ai-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 6px;
 }
 
@@ -437,7 +440,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding-left: 24px;
   font-size: 11px;
   color: #64748b;
 }
@@ -451,6 +453,82 @@
 
 .xfp-ai-status-inline .xfp-ai-dot.ready {
   background: #22c55e;
+}
+
+/* Gear Button */
+.xfp-gear-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.xfp-gear-btn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.xfp-gear-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* API Key Container */
+.xfp-api-key-container {
+  display: none;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 8px;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.xfp-api-key-container.show {
+  display: block;
+}
+
+.xfp-api-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #4a5568;
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-family: monospace;
+  margin-bottom: 4px;
+}
+
+.xfp-api-input:focus {
+  outline: none;
+  border-color: #8b5cf6;
+}
+
+/* Custom Prompt Textarea */
+.xfp-prompt-input {
+  width: 100%;
+  height: 60px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid #4a5568;
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-family: monospace;
+  margin-bottom: 4px;
+  resize: vertical;
+}
+
+.xfp-prompt-input:focus {
+  outline: none;
+  border-color: #8b5cf6;
 }
 
 /* Divider */
