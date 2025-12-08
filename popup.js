@@ -20,6 +20,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateStats();
   updateAIStatus();
 
+  // Restore hidden panel state
+  chrome.storage.local.get('hiddenPanelOpen', (result) => {
+    if (result.hiddenPanelOpen) {
+      document.getElementById('hiddenTweetsPanel').classList.add('show');
+      updateHiddenTweetsList();
+    }
+  });
+
   // Event listeners
   document.getElementById('enableToggle').addEventListener('change', async (e) => {
     await saveSettings({ enabled: e.target.checked });
@@ -70,14 +78,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Hidden tweets panel toggle
   document.getElementById('hiddenStat').addEventListener('click', () => {
     const panel = document.getElementById('hiddenTweetsPanel');
-    panel.classList.toggle('show');
-    if (panel.classList.contains('show')) {
+    const isOpen = panel.classList.toggle('show');
+    chrome.storage.local.set({ hiddenPanelOpen: isOpen });
+    if (isOpen) {
       updateHiddenTweetsList();
     }
   });
 
   document.getElementById('closeHiddenPanel').addEventListener('click', () => {
     document.getElementById('hiddenTweetsPanel').classList.remove('show');
+    chrome.storage.local.set({ hiddenPanelOpen: false });
   });
 });
 
