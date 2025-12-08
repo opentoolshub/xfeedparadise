@@ -9,12 +9,12 @@
 
 /* Position variants */
 .xfp-floating-panel.pos-bottom-right {
-  bottom: 80px;
+  bottom: 140px;
   right: 20px;
 }
 
 .xfp-floating-panel.pos-bottom-left {
-  bottom: 80px;
+  bottom: 140px;
   left: 20px;
 }
 
