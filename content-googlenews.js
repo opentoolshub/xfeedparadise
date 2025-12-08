@@ -130,73 +130,81 @@
       // Use the element directly - don't traverse up
       if (!element) return null;
 
-      // Find headline within this element
-      const headlineEl = element.querySelector('h3') ||
-                         element.querySelector('h4') ||
-                         element.querySelector('[role="heading"]') ||
-                         element.querySelector('a[href*="/articles/"]');
+      // Google News structure: the headline IS the link text
+      // Links use /read/ URLs, and the text content is the headline
+      const linkEl = element.querySelector('a[href*="/read/"]');
 
-      if (!headlineEl) {
-        console.log('🌴 XFP Debug: No headline found in element', element);
+      if (!linkEl) {
+        console.log('🌴 XFP Debug: No /read/ link found in element');
         return null;
       }
 
-      const headline = headlineEl.textContent?.trim();
+      // The headline is the link text itself
+      const headline = linkEl.textContent?.trim();
       if (!headline || headline.length < 10) {
         console.log('🌴 XFP Debug: Headline too short:', headline);
         return null;
       }
 
-      // Find the article link
-      const linkEl = element.querySelector('a[href*="/articles/"]') ||
-                     element.querySelector('a[href*="/read/"]') ||
-                     headlineEl.closest('a') ||
-                     headlineEl.querySelector('a');
+      // Skip "Full Coverage" links
+      if (headline === 'Full Coverage') {
+        return null;
+      }
 
-      const articleUrl = linkEl?.href || '';
+      const articleUrl = linkEl.href || '';
 
       // Generate stable ID from URL or headline
       const id = articleUrl ? `gnews-${hashString(articleUrl)}` : `gnews-${hashString(headline)}`;
 
-      // Find snippet/description - usually near the headline
+      // Find snippet/description - usually a sibling or nearby element
       let snippet = '';
 
-      // Try to find snippet in various ways
-      const snippetCandidates = [
-        element.querySelector('[data-n-sp]'),
-        headlineEl.parentElement?.nextElementSibling,
-        element.querySelector('div > span:not([role])'),
-      ];
-
-      for (const candidate of snippetCandidates) {
-        if (candidate) {
-          const text = candidate.textContent?.trim();
-          // Skip if it looks like a source name (short) or timestamp
-          if (text && text.length > 30 && !text.match(/^\d+\s*(hour|min|day|week)/i)) {
-            snippet = text;
-            break;
+      // Try to find snippet in various ways - look near the link
+      const linkParent = linkEl.parentElement;
+      if (linkParent) {
+        // Look for sibling text blocks
+        const siblings = linkParent.parentElement?.children || [];
+        for (const sibling of siblings) {
+          if (sibling !== linkParent && sibling !== linkEl) {
+            const text = sibling.textContent?.trim();
+            // Skip if it looks like a source name (short) or timestamp
+            if (text && text.length > 40 && !text.match(/^\d+\s*(hour|min|day|week)/i)) {
+              snippet = text;
+              break;
+            }
           }
         }
       }
 
-      // Find publication/source name
+      // Find publication/source name - usually near the time element
+      // In Google News, source appears before the headline typically
       let sourceName = 'Unknown';
 
-      // Look for source indicators
-      const sourceEl = element.querySelector('time')?.parentElement ||
-                       element.querySelector('[data-n-tid]') ||
-                       element.querySelector('a[data-n-tid]');
-
-      if (sourceEl) {
-        // Source is often before the dot or dash
-        const sourceText = sourceEl.textContent?.split(/[·•\-–—]/)[0]?.trim();
-        if (sourceText && sourceText.length < 50) {
-          sourceName = sourceText;
+      // Look for time element and get source from nearby text
+      const timeEl = element.querySelector('time');
+      if (timeEl) {
+        // Source name is often a sibling or in the same container
+        const timeParent = timeEl.parentElement;
+        if (timeParent) {
+          // Look for a link that's not the article link (might be source link)
+          const sourceLink = timeParent.querySelector('a:not([href*="/read/"])');
+          if (sourceLink) {
+            sourceName = sourceLink.textContent?.trim() || 'Unknown';
+          } else {
+            // Try getting text before time
+            const parentText = timeParent.textContent?.trim();
+            const timePart = timeEl.textContent?.trim() || '';
+            if (parentText && timePart) {
+              const beforeTime = parentText.split(timePart)[0]?.trim();
+              if (beforeTime && beforeTime.length < 50 && beforeTime.length > 2) {
+                sourceName = beforeTime.replace(/[·•\-–—]$/, '').trim();
+              }
+            }
+          }
         }
       }
 
-      // Find timestamp
-      const timeEl = element.querySelector('time');
+      // Parse timestamp
       let timestamp = Date.now();
       if (timeEl?.dateTime) {
         timestamp = new Date(timeEl.dateTime).getTime();
@@ -221,14 +229,18 @@
       // Check for image
       const hasImage = !!element.querySelector('img[src*="http"]');
 
-      // Detect section (for context)
+      // Detect section (for context) - look for h2 headers above
       let section = null;
       let parent = element.parentElement;
-      while (parent && parent !== document.body) {
+      for (let i = 0; i < 10 && parent && parent !== document.body; i++) {
         const header = parent.querySelector('h2, [role="heading"][aria-level="2"]');
         if (header) {
-          section = header.textContent?.trim();
-          break;
+          const headerText = header.textContent?.trim();
+          // Make sure it's a section header not an article
+          if (headerText && headerText.length < 50) {
+            section = headerText;
+            break;
+          }
         }
         parent = parent.parentElement;
       }
@@ -396,33 +408,42 @@
 
   // Process all visible articles
   function processVisibleArticles() {
-    // Find all headlines first, then process their containers
-    // This is more reliable than trying to guess article container selectors
-    const headlines = document.querySelectorAll('h3 a[href*="/articles/"], h4 a[href*="/articles/"], a[href*="/articles/"] h3, a[href*="/articles/"] h4');
+    // Google News uses /read/ links for articles, not /articles/
+    // Find all article links - they have href containing "/read/" and substantial text
+    const articleLinks = document.querySelectorAll('a[href*="/read/"]');
 
-    console.log('🌴 XFP Debug: Found', headlines.length, 'headline links');
+    console.log('🌴 XFP Debug: Found', articleLinks.length, 'article links');
 
-    headlines.forEach(headline => {
-      // Find the closest reasonable container for this headline
-      // Go up max 5 levels to find a container, but stop at main/section
-      let container = headline;
-      for (let i = 0; i < 5; i++) {
+    articleLinks.forEach(link => {
+      // Skip if it's a "Full Coverage" link or other short text
+      const linkText = link.textContent?.trim();
+      if (!linkText || linkText.length < 20 || linkText === 'Full Coverage') {
+        return;
+      }
+
+      // Skip if already observed
+      if (link.dataset.xfpObserved) {
+        return;
+      }
+
+      // Find a reasonable container - go up a few levels
+      // but stop before we get to containers with many articles
+      let container = link;
+      for (let i = 0; i < 4; i++) {
         const parent = container.parentElement;
-        if (!parent || parent.tagName === 'MAIN' || parent.tagName === 'SECTION' || parent.tagName === 'BODY') {
+        if (!parent || parent.tagName === 'MAIN' || parent.tagName === 'NAV') {
           break;
         }
-        // Stop if parent contains multiple headlines (it's a list container)
-        const headlinesInParent = parent.querySelectorAll('h3, h4');
-        if (headlinesInParent.length > 1) {
+        // Stop if parent contains multiple article links
+        const linksInParent = parent.querySelectorAll('a[href*="/read/"]');
+        if (linksInParent.length > 3) {
           break;
         }
         container = parent;
       }
 
-      if (container && !container.dataset.xfpObserved) {
-        console.log('🌴 XFP Debug: Registering container for headline:', headline.textContent?.slice(0, 40));
-        registerArticle(container);
-      }
+      console.log('🌴 XFP Debug: Registering article:', linkText.slice(0, 50));
+      registerArticle(container);
     });
 
     console.log('🌴 XFP Debug: Total processed articles:', processedArticles.size);
