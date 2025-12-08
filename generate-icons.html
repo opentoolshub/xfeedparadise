@@ -4,32 +4,57 @@
   <title>Generate XFeed Paradise Icons</title>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #1a1a2e; color: white; }
-    canvas { margin: 10px; border: 1px solid #333; }
-    .icons { display: flex; gap: 20px; align-items: end; }
-    button { padding: 10px 20px; margin-top: 20px; }
-    a { color: #8b5cf6; }
+    canvas { margin: 10px; border: 1px solid #333; display: block; }
+    .icons { display: flex; gap: 30px; align-items: end; }
+    .icon-group { text-align: center; }
+    .icon-group p { margin: 8px 0; font-size: 14px; color: #94a3b8; }
+    button {
+      padding: 8px 16px;
+      margin-top: 8px;
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { opacity: 0.9; }
+    h1 { color: #a78bfa; }
+    .instructions {
+      background: rgba(255,255,255,0.05);
+      padding: 16px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    code { background: rgba(139, 92, 246, 0.2); padding: 2px 6px; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <h1>XFeed Paradise Icon Generator</h1>
-  <p>Right-click each canvas and "Save image as..." to save the icons:</p>
+  <h1>🌴 XFeed Paradise Icon Generator</h1>
 
-  <div class="icons">
-    <div>
-      <canvas id="icon16" width="16" height="16"></canvas>
-      <p>icon16.png</p>
-    </div>
-    <div>
-      <canvas id="icon48" width="48" height="48"></canvas>
-      <p>icon48.png</p>
-    </div>
-    <div>
-      <canvas id="icon128" width="128" height="128"></canvas>
-      <p>icon128.png</p>
-    </div>
+  <div class="instructions">
+    <strong>Instructions:</strong> Click each "Download" button to save the icons, then move them to the <code>icons/</code> folder.
   </div>
 
-  <p style="margin-top: 20px;">Save these to the <code>icons/</code> folder.</p>
+  <div class="icons">
+    <div class="icon-group">
+      <canvas id="icon16" width="16" height="16"></canvas>
+      <p>icon16.png</p>
+      <button onclick="downloadIcon('icon16')">Download</button>
+    </div>
+    <div class="icon-group">
+      <canvas id="icon48" width="48" height="48"></canvas>
+      <p>icon48.png</p>
+      <button onclick="downloadIcon('icon48')">Download</button>
+    </div>
+    <div class="icon-group">
+      <canvas id="icon128" width="128" height="128"></canvas>
+      <p>icon128.png</p>
+      <button onclick="downloadIcon('icon128')">Download</button>
+    </div>
+  </div>
 
   <script>
     function drawIcon(canvas) {
@@ -54,6 +79,15 @@
       ctx.fillText('🌴', size/2, size/2 + size * 0.05);
     }
 
+    function downloadIcon(id) {
+      const canvas = document.getElementById(id);
+      const link = document.createElement('a');
+      link.download = id + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // Draw all icons on load
     drawIcon(document.getElementById('icon16'));
     drawIcon(document.getElementById('icon48'));
     drawIcon(document.getElementById('icon128'));

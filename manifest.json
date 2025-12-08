@@ -1,15 +1,17 @@
 {
   "manifest_version": 3,
   "name": "XFeed Paradise",
-  "version": "1.0.0",
-  "description": "Filter your X/Twitter feed to surface content that uplifts and enlightens, while hiding outrage-bait",
+  "version": "1.1.0",
+  "description": "AI-powered feed filter that surfaces uplifting content and hides outrage-bait",
   "permissions": [
     "storage",
     "activeTab"
   ],
   "host_permissions": [
     "https://twitter.com/*",
-    "https://x.com/*"
+    "https://x.com/*",
+    "https://cdn.jsdelivr.net/*",
+    "https://huggingface.co/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -28,11 +30,21 @@
     }
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["ai-scorer.js"],
+      "matches": ["https://twitter.com/*", "https://x.com/*"]
+    }
+  ]
 }

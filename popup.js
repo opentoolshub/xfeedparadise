@@ -9,14 +9,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('thresholdSlider').value = settings.threshold;
   document.getElementById('thresholdValue').textContent = settings.threshold;
   document.getElementById('showScores').checked = settings.showScores;
+  document.getElementById('useAI').checked = settings.useAI !== false;
 
   // Set active mode button
   document.querySelectorAll('.mode-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === settings.filterMode);
   });
 
-  // Load stats
+  // Load stats and AI status
   updateStats();
+  updateAIStatus();
 
   // Event listeners
   document.getElementById('enableToggle').addEventListener('change', async (e) => {
@@ -50,6 +52,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
+  document.getElementById('useAI').addEventListener('change', async (e) => {
+    await saveSettings({ useAI: e.target.checked });
+    sendToContentScript({ type: 'UPDATE_SETTINGS', settings: { useAI: e.target.checked } });
+    updateAIStatus();
+    showRefreshNotice();
+  });
+
   document.getElementById('clearData').addEventListener('click', async (e) => {
     e.preventDefault();
     if (confirm('Are you sure you want to clear all stored tweet data?')) {
@@ -67,6 +76,7 @@ async function loadSettings() {
         threshold: 0,
         showScores: false,
         filterMode: 'hide',
+        useAI: true,
         customPositiveWords: [],
         customNegativeWords: []
       };
@@ -115,4 +125,43 @@ function showRefreshNotice() {
   const notice = document.getElementById('refreshNotice');
   notice.classList.add('show');
   setTimeout(() => notice.classList.remove('show'), 3000);
+}
+
+async function updateAIStatus() {
+  const settings = await loadSettings();
+  const statusEl = document.getElementById('aiStatus');
+  const indicator = statusEl.querySelector('.ai-indicator');
+  const text = statusEl.querySelector('span:last-child');
+
+  if (!settings.useAI) {
+    indicator.className = 'ai-indicator disabled';
+    text.textContent = 'AI scoring disabled';
+    return;
+  }
+
+  // Query the content script for AI status
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab && (tab.url?.includes('twitter.com') || tab.url?.includes('x.com'))) {
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_AI_STATUS' });
+      if (response) {
+        if (response.aiReady) {
+          indicator.className = 'ai-indicator ready';
+          text.textContent = 'AI model active';
+        } else if (response.aiLoading) {
+          indicator.className = 'ai-indicator loading';
+          text.textContent = 'Loading AI model...';
+        } else {
+          indicator.className = 'ai-indicator error';
+          text.textContent = 'AI unavailable (using keywords)';
+        }
+        return;
+      }
+    } catch (error) {
+      // Content script not loaded
+    }
+  }
+
+  indicator.className = 'ai-indicator loading';
+  text.textContent = 'Open X/Twitter to activate';
 }

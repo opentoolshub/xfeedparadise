@@ -1,5 +1,6 @@
 // XFeed Paradise - Content Script
 // Monitors X/Twitter feed, extracts tweets, and filters based on vibe score
+// Now with AI-powered sentiment analysis!
 
 (async function() {
   'use strict';
@@ -9,6 +10,65 @@
   // Wait for dependencies
   await window.tweetDB.ready;
   await VibeFilter.loadSettings();
+
+  // Initialize AI Scorer
+  let aiScorerReady = false;
+  async function initAIScorer() {
+    try {
+      console.log('🌴 XFeed Paradise: Loading AI model...');
+
+      // Dynamic import of transformers.js
+      const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1');
+
+      // Use sentiment analysis pipeline
+      const classifier = await pipeline(
+        'sentiment-analysis',
+        'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
+        { progress_callback: (progress) => {
+          if (progress.status === 'progress') {
+            console.log(`🌴 AI Model loading: ${Math.round(progress.progress)}%`);
+          }
+        }}
+      );
+
+      // Create AI scorer object
+      window.AIScorer = {
+        isReady: true,
+        classifier,
+        async scoreTweet(text) {
+          try {
+            const result = await this.classifier(text.slice(0, 512)); // Limit text length
+            if (result && result[0]) {
+              const { label, score } = result[0];
+              if (label === 'POSITIVE') {
+                return Math.round((score - 0.5) * 200);
+              } else {
+                return Math.round((0.5 - score) * 200);
+              }
+            }
+          } catch (e) {
+            console.error('AI scoring error:', e);
+          }
+          return null;
+        }
+      };
+
+      VibeFilter.aiScorer = window.AIScorer;
+      aiScorerReady = true;
+      console.log('🌴 XFeed Paradise: AI model loaded! Using AI-powered scoring.');
+
+      // Reprocess visible tweets with AI
+      reprocessVisibleTweets();
+
+    } catch (error) {
+      console.warn('🌴 XFeed Paradise: AI model failed to load, using keyword scoring:', error.message);
+    }
+  }
+
+  // Start loading AI in background (don't block initial filtering)
+  if (VibeFilter.settings.useAI !== false) {
+    initAIScorer();
+  }
 
   // Track processed tweets to avoid duplicates
   const processedTweets = new Set();
@@ -170,12 +230,13 @@
     const tweet = extractTweetData(tweetElement);
     if (!tweet) return;
 
-    // Calculate vibe score
-    const score = VibeFilter.calculateScore(tweet);
-    tweet.vibeScore = score;
-
-    // Mark as processed
+    // Mark as processed early to avoid duplicate processing
     processedTweets.add(tweet.id);
+
+    // Calculate vibe score (async - uses AI when available)
+    const score = await VibeFilter.calculateScore(tweet);
+    tweet.vibeScore = score;
+    tweet.scoredWithAI = aiScorerReady;
 
     // Save to database
     try {
@@ -238,6 +299,11 @@
         sendResponse({ stats, processedCount: processedTweets.size });
       });
       return true; // Keep channel open for async response
+    } else if (message.type === 'GET_AI_STATUS') {
+      sendResponse({
+        aiReady: aiScorerReady,
+        aiLoading: !aiScorerReady && VibeFilter.settings.useAI
+      });
     } else if (message.type === 'TOGGLE_ENABLED') {
       VibeFilter.settings.enabled = message.enabled;
       reprocessVisibleTweets();

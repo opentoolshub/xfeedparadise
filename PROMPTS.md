@@ -1,5 +1,17 @@
 # User Prompts Log
 
+## 2024-12-07 - Add AI Scoring
+
+Also, I want it to be doing this using AI. Can we install an AI library to make this work?
+
+---
+
+## 2024-12-07 - Icon Rename Request
+
+Rename the files for default icons that I downloaded correctly, please and also change the icons page
+
+---
+
 ## 2024-12-07 - Initial Project Request
 
 So, okay, make a Chrome extension which sits on top of your Twitter feed, like your X feed, and reads the content of the page. And what it should do is two things. Firstly, it should extract all the tweets that you read into a database of all tweets. All users of this Chrome extension. It'll ingest their own feeds.

@@ -1,5 +1,6 @@
 // Vibe-based tweet filtering algorithm
 // Scores tweets from -100 (pure outrage) to +100 (pure enlightenment)
+// Uses AI (Transformers.js) when available, falls back to keyword matching
 
 const VibeFilter = {
   // Default settings - user can customize
@@ -8,9 +9,13 @@ const VibeFilter = {
     threshold: 0, // Hide tweets below this score
     showScores: false, // Debug: show vibe scores on tweets
     filterMode: 'hide', // 'hide', 'dim', or 'label'
+    useAI: true, // Use AI scoring when available
     customPositiveWords: [],
     customNegativeWords: [],
   },
+
+  // AI scorer reference (set by content.js)
+  aiScorer: null,
 
   // Words/phrases that indicate uplifting, enlightening content
   positivePatterns: [
@@ -122,10 +127,9 @@ const VibeFilter = {
     }},
   ],
 
-  // Calculate vibe score for a tweet
-  calculateScore(tweet) {
+  // Calculate vibe score using keywords (fallback method)
+  calculateKeywordScore(text) {
     let score = 0;
-    const text = tweet.text || '';
 
     // Apply positive patterns
     for (const { pattern, weight } of this.positivePatterns) {
@@ -158,9 +162,35 @@ const VibeFilter = {
     }
 
     // Normalize to -100 to 100 range
-    score = Math.max(-100, Math.min(100, score));
+    return Math.max(-100, Math.min(100, score));
+  },
 
-    return score;
+  // Calculate vibe score for a tweet (async - uses AI when available)
+  async calculateScore(tweet) {
+    const text = tweet.text || '';
+
+    // Try AI scoring first if enabled and available
+    if (this.settings.useAI && this.aiScorer && this.aiScorer.isReady) {
+      try {
+        const aiScore = await this.aiScorer.scoreTweet(text);
+        if (aiScore !== null) {
+          // Combine AI score with keyword adjustments for better accuracy
+          const keywordAdjustment = this.calculateKeywordScore(text) * 0.3;
+          const combinedScore = Math.round(aiScore * 0.7 + keywordAdjustment);
+          return Math.max(-100, Math.min(100, combinedScore));
+        }
+      } catch (error) {
+        console.error('AI scoring failed, falling back to keywords:', error);
+      }
+    }
+
+    // Fall back to keyword-based scoring
+    return this.calculateKeywordScore(text);
+  },
+
+  // Synchronous version for backward compatibility
+  calculateScoreSync(tweet) {
+    return this.calculateKeywordScore(tweet.text || '');
   },
 
   // Determine if tweet should be shown

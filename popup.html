@@ -237,6 +237,46 @@
       color: #c4b5fd;
     }
 
+    .ai-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .ai-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .ai-indicator.loading {
+      background: #fbbf24;
+      animation: pulse 1.5s infinite;
+    }
+
+    .ai-indicator.ready {
+      background: #22c55e;
+    }
+
+    .ai-indicator.error {
+      background: #ef4444;
+    }
+
+    .ai-indicator.disabled {
+      background: #6b7280;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
     .refresh-notice {
       background: rgba(251, 191, 36, 0.1);
       border: 1px solid rgba(251, 191, 36, 0.3);
@@ -289,6 +329,18 @@
       <button class="mode-btn" data-mode="dim">Dim</button>
       <button class="mode-btn" data-mode="label">Collapse</button>
     </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">AI Scoring</div>
+    <div class="ai-status" id="aiStatus">
+      <span class="ai-indicator loading"></span>
+      <span>Loading AI model...</span>
+    </div>
+    <label class="checkbox-option">
+      <input type="checkbox" id="useAI" checked>
+      <span>Use AI-powered scoring</span>
+    </label>
   </div>
 
   <div class="section">
