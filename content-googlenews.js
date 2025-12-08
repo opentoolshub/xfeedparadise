@@ -848,7 +848,7 @@
       } else {
         list.innerHTML = hiddenItems.slice(0, 20).map(item => `
           <div class="xfp-dropdown-item" data-url="${item.url}">
-            <div class="xfp-dropdown-author">${escapeHtml(item.authorHandle)}</div>
+            ${item.authorHandle && item.authorHandle !== 'Unknown' ? `<div class="xfp-dropdown-author">${escapeHtml(item.authorHandle)}</div>` : ''}
             <div class="xfp-dropdown-text">${escapeHtml(item.text)}</div>
             <div class="xfp-dropdown-meta">
               <span>${item.vibeLabel}</span>
