@@ -365,6 +365,126 @@
     processVisibleTweets();
   }
 
+  // Create floating panel UI
+  function createFloatingPanel() {
+    // Remove existing panel if any
+    document.querySelector('.xfp-floating-panel')?.remove();
+
+    const panel = document.createElement('div');
+    panel.className = 'xfp-floating-panel';
+    panel.innerHTML = `
+      <div class="xfp-floating-dropdown">
+        <div class="xfp-dropdown-header">
+          <span class="xfp-dropdown-title">🌴 Hidden Tweets</span>
+          <button class="xfp-dropdown-close">&times;</button>
+        </div>
+        <div class="xfp-dropdown-list">
+          <div class="xfp-dropdown-empty">No tweets hidden yet</div>
+        </div>
+        <div class="xfp-ai-status">
+          <span class="xfp-ai-dot"></span>
+          <span class="xfp-ai-text">AI loading...</span>
+        </div>
+      </div>
+      <button class="xfp-floating-btn">
+        <span class="xfp-floating-btn-icon">🌴</span>
+        <span class="xfp-floating-badge">0</span>
+      </button>
+    `;
+
+    document.body.appendChild(panel);
+
+    // Toggle dropdown
+    const btn = panel.querySelector('.xfp-floating-btn');
+    const dropdown = panel.querySelector('.xfp-floating-dropdown');
+    const closeBtn = panel.querySelector('.xfp-dropdown-close');
+
+    btn.addEventListener('click', () => {
+      dropdown.classList.toggle('show');
+      if (dropdown.classList.contains('show')) {
+        updateFloatingPanel();
+      }
+    });
+
+    closeBtn.addEventListener('click', () => {
+      dropdown.classList.remove('show');
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!panel.contains(e.target)) {
+        dropdown.classList.remove('show');
+      }
+    });
+
+    return panel;
+  }
+
+  // Update floating panel content
+  function updateFloatingPanel() {
+    const badge = document.querySelector('.xfp-floating-badge');
+    const list = document.querySelector('.xfp-dropdown-list');
+    const aiDot = document.querySelector('.xfp-ai-dot');
+    const aiText = document.querySelector('.xfp-ai-text');
+
+    if (badge) {
+      badge.textContent = hiddenCount;
+      badge.style.display = hiddenCount > 0 ? 'flex' : 'none';
+    }
+
+    if (aiDot && aiText) {
+      if (aiScorerReady) {
+        aiDot.classList.add('ready');
+        aiText.textContent = 'AI active';
+      } else {
+        aiDot.classList.remove('ready');
+        aiText.textContent = `AI loading... ${aiLoadingProgress}%`;
+      }
+    }
+
+    if (list) {
+      if (hiddenTweets.length === 0) {
+        list.innerHTML = '<div class="xfp-dropdown-empty">No tweets hidden yet</div>';
+      } else {
+        list.innerHTML = hiddenTweets.slice(0, 20).map(tweet => `
+          <div class="xfp-dropdown-item" data-url="${tweet.url}">
+            <div class="xfp-dropdown-author">@${tweet.authorHandle}</div>
+            <div class="xfp-dropdown-text">${escapeHtml(tweet.text)}</div>
+            <div class="xfp-dropdown-meta">
+              <span>${tweet.vibeLabel}</span>
+              <span>Score: ${tweet.score}</span>
+            </div>
+          </div>
+        `).join('');
+
+        // Add click handlers
+        list.querySelectorAll('.xfp-dropdown-item').forEach(item => {
+          item.addEventListener('click', () => {
+            window.open(item.dataset.url, '_blank');
+          });
+        });
+      }
+    }
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text || '';
+    return div.innerHTML;
+  }
+
+  // Create the floating panel
+  const floatingPanel = createFloatingPanel();
+
+  // Update badge whenever hidden count changes (called from applyFilter)
+  const originalHiddenCount = { value: 0 };
+  setInterval(() => {
+    if (originalHiddenCount.value !== hiddenCount) {
+      originalHiddenCount.value = hiddenCount;
+      updateFloatingPanel();
+    }
+  }, 500);
+
   // Initialize
   console.log('🌴 XFeed Paradise: Starting tweet observation...');
   processVisibleTweets();
