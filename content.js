@@ -12,64 +12,35 @@
   await VibeFilter.loadSettings();
   await VibeFilter.loadGroqApiKey();
 
-  // AI Scorer state (managed via background script)
-  let aiScorerReady = false;
-  let aiLoadingProgress = 0;
+  // AI Scorer state - now uses Groq API instead of local model
+  let groqApiReady = !!VibeFilter.groqApiKey;
 
-  // Request AI initialization via background script
+  // Check Groq API status
+  async function checkGroqStatus() {
+    groqApiReady = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
+    return groqApiReady;
+  }
+
+  // Initialize AI (just checks Groq status)
   async function initAIScorer() {
-    console.log('🌴 XFeed Paradise: Requesting AI initialization...');
-    chrome.runtime.sendMessage({ type: 'INIT_AI_REQUEST' });
-
-    // Poll for AI status
-    const checkStatus = async () => {
-      try {
-        const response = await chrome.runtime.sendMessage({ type: 'GET_AI_STATUS_BG' });
-        if (response) {
-          aiLoadingProgress = response.aiProgress || 0;
-          if (response.aiReady) {
-            aiScorerReady = true;
-            console.log('🌴 XFeed Paradise: AI model ready! Reprocessing feed...');
-            reprocessVisibleTweets();
-            return;
-          }
-          if (response.aiLoading) {
-            console.log(`🌴 AI Model loading: ${aiLoadingProgress}%`);
-            setTimeout(checkStatus, 1000);
-          }
-        }
-      } catch (error) {
-        console.warn('🌴 AI status check failed:', error);
-      }
-    };
-
-    checkStatus();
-  }
-
-  // Score tweet via background script (which forwards to offscreen doc)
-  async function scoreWithAI(text) {
-    if (!aiScorerReady) return null;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: 'SCORE_TWEET_REQUEST',
-        text
-      });
-      return response?.score ?? null;
-    } catch (error) {
-      console.error('AI scoring error:', error);
-      return null;
+    console.log('🌴 XFeed Paradise: Checking Groq API status...');
+    await checkGroqStatus();
+    if (groqApiReady) {
+      console.log('🌴 XFeed Paradise: Groq API ready for AI scoring');
+    } else {
+      console.log('🌴 XFeed Paradise: No Groq API key - using keyword scoring');
     }
+    updateFloatingPanel();
   }
 
-  // Create AI scorer interface for filter.js
+  // Local AI scorer is disabled - Groq scoring happens in filter.js
   window.AIScorer = {
-    get isReady() { return aiScorerReady; },
-    scoreTweet: scoreWithAI
+    get isReady() { return false; }, // Local AI disabled
+    scoreTweet: async () => null
   };
   VibeFilter.aiScorer = window.AIScorer;
 
-  // Start loading AI in background (don't block initial filtering)
+  // Check Groq status on init
   if (VibeFilter.settings.useAI !== false) {
     initAIScorer();
   }
@@ -699,17 +670,18 @@
       hiddenCountLabel.textContent = `(${hiddenCount})`;
     }
 
-    // Update AI status
+    // Update AI status (now shows Groq status)
     if (aiDot && aiText) {
-      if (aiScorerReady) {
-        aiDot.classList.add('ready');
-        aiText.textContent = 'AI active';
-      } else if (VibeFilter.settings.useAI !== false) {
-        aiDot.classList.remove('ready');
-        aiText.textContent = aiLoadingProgress > 0 ? `Loading ${aiLoadingProgress}%` : 'Initializing...';
-      } else {
+      const hasGroqKey = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
+      if (VibeFilter.settings.useAI === false) {
         aiDot.classList.remove('ready');
         aiText.textContent = 'AI disabled';
+      } else if (hasGroqKey) {
+        aiDot.classList.add('ready');
+        aiText.textContent = 'Groq AI active';
+      } else {
+        aiDot.classList.remove('ready');
+        aiText.textContent = 'Keywords only';
       }
     }
 

@@ -1,86 +1,42 @@
 // XFeed Paradise - Background Service Worker
-// Manages offscreen document for AI processing
+// Note: Local Transformers.js AI is disabled due to Chrome extension worker limitations
+// AI scoring is handled via Groq API in the content script
 
-let aiReady = false;
-let aiLoading = false;
-let aiProgress = 0;
-let offscreenCreated = false;
+// Track Groq API status
+let groqApiKeySet = false;
 
-// Create offscreen document for AI processing
-async function setupOffscreenDocument() {
-  if (offscreenCreated) return;
-
-  try {
-    // Check if offscreen document already exists
-    const existingContexts = await chrome.runtime.getContexts({
-      contextTypes: ['OFFSCREEN_DOCUMENT']
-    });
-
-    if (existingContexts.length > 0) {
-      offscreenCreated = true;
-      return;
-    }
-
-    // Create offscreen document
-    await chrome.offscreen.createDocument({
-      url: 'offscreen.html',
-      reasons: ['WORKERS'],
-      justification: 'AI model processing for tweet sentiment analysis'
-    });
-
-    offscreenCreated = true;
-    aiLoading = true;
-    console.log('🌴 Background: Offscreen document created');
-
-  } catch (error) {
-    console.error('🌴 Background: Failed to create offscreen document:', error);
-  }
+// Check if Groq API key is configured
+async function checkGroqStatus() {
+  const result = await chrome.storage.sync.get('groqApiKey');
+  groqApiKeySet = !!(result.groqApiKey && result.groqApiKey.startsWith('gsk_'));
+  return groqApiKeySet;
 }
 
-// Listen for messages from offscreen document
+// Handle messages from content scripts and popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'AI_READY') {
-    aiReady = true;
-    aiLoading = false;
-    aiProgress = 100;
-    console.log('🌴 Background: AI model ready');
-  } else if (message.type === 'AI_PROGRESS') {
-    aiProgress = message.progress;
-    aiLoading = true;
-  } else if (message.type === 'AI_ERROR') {
-    aiLoading = false;
-    console.error('🌴 Background: AI error:', message.error);
-  }
-  return true;
-});
-
-// Handle messages from content scripts
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'SCORE_TWEET_REQUEST') {
-    // Forward to offscreen document
-    if (!aiReady) {
-      sendResponse({ score: null, aiReady: false });
-      return true;
-    }
-
-    chrome.runtime.sendMessage({ type: 'SCORE_TWEET', text: message.text })
-      .then(response => {
-        sendResponse({ score: response?.score, aiReady: true });
-      })
-      .catch(() => {
-        sendResponse({ score: null, aiReady: false });
+  if (message.type === 'GET_AI_STATUS_BG') {
+    // Return Groq-based AI status
+    checkGroqStatus().then(hasKey => {
+      sendResponse({
+        aiReady: hasKey,
+        aiLoading: false,
+        aiProgress: hasKey ? 100 : 0,
+        usingGroq: true
       });
-    return true; // Keep channel open
-
-  } else if (message.type === 'GET_AI_STATUS_BG') {
-    sendResponse({
-      aiReady,
-      aiLoading,
-      aiProgress
     });
+    return true; // Keep channel open for async
+
   } else if (message.type === 'INIT_AI_REQUEST') {
-    setupOffscreenDocument();
-    sendResponse({ status: 'initializing' });
+    // No local AI to init - just check Groq status
+    checkGroqStatus().then(hasKey => {
+      sendResponse({ status: hasKey ? 'ready' : 'no_api_key' });
+    });
+    return true;
+
+  } else if (message.type === 'SCORE_TWEET_REQUEST') {
+    // Local AI is disabled - scoring happens via Groq in content script
+    sendResponse({ score: null, aiReady: false, useGroq: true });
+    return true;
   }
   return true;
 });
@@ -103,14 +59,6 @@ chrome.runtime.onInstalled.addListener((details) => {
       }
     });
   }
-
-  // Setup offscreen document
-  setupOffscreenDocument();
-});
-
-// Setup on startup
-chrome.runtime.onStartup.addListener(() => {
-  setupOffscreenDocument();
 });
 
 // Badge update for stats
@@ -129,9 +77,5 @@ async function updateBadge(tabId) {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete') {
     updateBadge(tabId);
-    // Ensure offscreen is ready when visiting X
-    if (tab.url?.includes('twitter.com') || tab.url?.includes('x.com')) {
-      setupOffscreenDocument();
-    }
   }
 });

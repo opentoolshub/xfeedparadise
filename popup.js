@@ -20,13 +20,52 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load stats and AI status
   updateStats();
   updateAIStatus();
+  updateHiddenTweetsList();
 
-  // Restore hidden panel state
-  chrome.storage.local.get('hiddenPanelOpen', (result) => {
-    if (result.hiddenPanelOpen) {
-      document.getElementById('hiddenTweetsPanel').classList.add('show');
-      updateHiddenTweetsList();
+  // Restore collapsible section states
+  chrome.storage.local.get(['popupHiddenExpanded', 'popupSettingsExpanded'], (result) => {
+    // Default: hidden tweets expanded, settings collapsed
+    const hiddenExpanded = result.popupHiddenExpanded !== false;
+    const settingsExpanded = result.popupSettingsExpanded === true;
+
+    const hiddenToggle = document.getElementById('hiddenTweetsToggle');
+    const hiddenContent = document.getElementById('hiddenTweetsContent');
+    const settingsToggle = document.getElementById('settingsToggle');
+    const settingsContent = document.getElementById('settingsContent');
+
+    if (hiddenExpanded) {
+      hiddenToggle.classList.add('expanded');
+      hiddenContent.classList.add('show');
+    } else {
+      hiddenToggle.classList.remove('expanded');
+      hiddenContent.classList.remove('show');
     }
+
+    if (settingsExpanded) {
+      settingsToggle.classList.add('expanded');
+      settingsContent.classList.add('show');
+    } else {
+      settingsToggle.classList.remove('expanded');
+      settingsContent.classList.remove('show');
+    }
+  });
+
+  // Hidden tweets section toggle
+  document.getElementById('hiddenTweetsToggle').addEventListener('click', () => {
+    const toggle = document.getElementById('hiddenTweetsToggle');
+    const content = document.getElementById('hiddenTweetsContent');
+    toggle.classList.toggle('expanded');
+    content.classList.toggle('show');
+    chrome.storage.local.set({ popupHiddenExpanded: content.classList.contains('show') });
+  });
+
+  // Settings section toggle
+  document.getElementById('settingsToggle').addEventListener('click', () => {
+    const toggle = document.getElementById('settingsToggle');
+    const content = document.getElementById('settingsContent');
+    toggle.classList.toggle('expanded');
+    content.classList.toggle('show');
+    chrome.storage.local.set({ popupSettingsExpanded: content.classList.contains('show') });
   });
 
   // Event listeners
@@ -126,30 +165,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  document.getElementById('clearData').addEventListener('click', async (e) => {
-    e.preventDefault();
+  document.getElementById('clearData').addEventListener('click', async () => {
     if (confirm('Are you sure you want to clear all stored tweet data?')) {
       // Clear IndexedDB via content script
       await sendToContentScript({ type: 'CLEAR_DATA' });
       // Also clear local storage as backup
       await chrome.storage.local.clear();
       updateStats();
-    }
-  });
-
-  // Hidden tweets panel toggle
-  document.getElementById('hiddenStat').addEventListener('click', () => {
-    const panel = document.getElementById('hiddenTweetsPanel');
-    const isOpen = panel.classList.toggle('show');
-    chrome.storage.local.set({ hiddenPanelOpen: isOpen });
-    if (isOpen) {
       updateHiddenTweetsList();
     }
-  });
-
-  document.getElementById('closeHiddenPanel').addEventListener('click', () => {
-    document.getElementById('hiddenTweetsPanel').classList.remove('show');
-    chrome.storage.local.set({ hiddenPanelOpen: false });
   });
 });
 
@@ -198,14 +222,17 @@ async function updateStats() {
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_STATS' });
       if (response) {
+        const hiddenCount = response.hiddenCount || 0;
         document.getElementById('tweetCount').textContent = response.stats?.tweetCount || 0;
         document.getElementById('sessionCount').textContent = response.processedCount || 0;
-        document.getElementById('hiddenCount').textContent = response.hiddenCount || 0;
+        document.getElementById('hiddenCount').textContent = hiddenCount;
+        document.getElementById('hiddenCountLabel').textContent = `(${hiddenCount})`;
       }
     } catch (error) {
       document.getElementById('tweetCount').textContent = '-';
       document.getElementById('sessionCount').textContent = '-';
       document.getElementById('hiddenCount').textContent = '-';
+      document.getElementById('hiddenCountLabel').textContent = '(0)';
     }
   }
 }
@@ -269,31 +296,16 @@ async function updateAIStatus() {
     return;
   }
 
-  // Query the background script for AI status
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'GET_AI_STATUS_BG' });
-    if (response) {
-      if (response.aiReady) {
-        indicator.className = 'ai-indicator ready';
-        text.textContent = 'AI model active';
-      } else if (response.aiLoading) {
-        indicator.className = 'ai-indicator loading';
-        const progress = response.aiProgress || 0;
-        text.textContent = `Loading AI model... ${progress}%`;
-        // Poll for updates while loading
-        setTimeout(updateAIStatus, 500);
-      } else {
-        indicator.className = 'ai-indicator error';
-        text.textContent = 'AI initializing...';
-        setTimeout(updateAIStatus, 1000);
-      }
-      return;
-    }
-  } catch (error) {
-    // Background script not ready
-  }
+  // Check if Groq API key is configured
+  chrome.storage.sync.get('groqApiKey', (result) => {
+    const hasGroqKey = !!(result.groqApiKey && result.groqApiKey.startsWith('gsk_'));
 
-  indicator.className = 'ai-indicator loading';
-  text.textContent = 'Initializing...';
-  setTimeout(updateAIStatus, 1000);
+    if (hasGroqKey) {
+      indicator.className = 'ai-indicator ready';
+      text.textContent = 'Groq AI active';
+    } else {
+      indicator.className = 'ai-indicator error';
+      text.textContent = 'Add API key for AI scoring';
+    }
+  });
 }

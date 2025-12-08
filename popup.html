@@ -477,6 +477,144 @@
     .api-key-status.error {
       color: #ef4444;
     }
+
+    /* Collapsible sections */
+    .collapsible-section {
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .section-toggle {
+      width: 100%;
+      padding: 12px 16px;
+      background: none;
+      border: none;
+      color: #e2e8f0;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.2s;
+    }
+
+    .section-toggle:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .section-toggle-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-count {
+      color: #22c55e;
+      font-weight: 600;
+    }
+
+    .toggle-icon {
+      font-size: 10px;
+      color: #94a3b8;
+      transition: transform 0.2s;
+    }
+
+    .section-toggle.expanded .toggle-icon {
+      transform: rotate(180deg);
+    }
+
+    .section-content {
+      display: none;
+      padding: 12px 16px;
+      padding-top: 0;
+    }
+
+    .section-content.show {
+      display: block;
+    }
+
+    .divider {
+      height: 1px;
+      background: rgba(255, 255, 255, 0.1);
+      margin: 12px 0;
+    }
+
+    .clear-btn {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      background: rgba(239, 68, 68, 0.1);
+      color: #fca5a5;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .clear-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.5);
+    }
+
+    .inline-setting {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+    }
+
+    .inline-setting:first-child {
+      padding-top: 0;
+    }
+
+    .inline-label {
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+
+    .small-toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+    }
+
+    .small-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .small-toggle .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: #4a5568;
+      border-radius: 11px;
+      transition: 0.3s;
+    }
+
+    .small-toggle .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.3s;
+    }
+
+    .small-toggle input:checked + .toggle-slider {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    }
+
+    .small-toggle input:checked + .toggle-slider:before {
+      transform: translateX(18px);
+    }
   </style>
 </head>
 <body>
@@ -489,100 +627,119 @@
     Refresh the X tab to see changes
   </div>
 
-  <div class="toggle-section">
-    <span class="toggle-label">Filter Active</span>
-    <label class="toggle">
-      <input type="checkbox" id="enableToggle" checked>
-      <span class="toggle-slider"></span>
-    </label>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Vibe Threshold</div>
-    <div class="slider-container">
-      <div class="slider-header">
-        <span>Filter below score:</span>
-        <span class="slider-value" id="thresholdValue">0</span>
-      </div>
-      <input type="range" id="thresholdSlider" min="-50" max="50" value="0">
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Filter Mode</div>
-    <div class="mode-buttons">
-      <button class="mode-btn active" data-mode="hide">Hide</button>
-      <button class="mode-btn" data-mode="dim">Dim</button>
-      <button class="mode-btn" data-mode="label">Collapse</button>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">AI Scoring</div>
-    <div class="ai-status" id="aiStatus">
-      <span class="ai-indicator loading"></span>
-      <span>Loading AI model...</span>
-    </div>
-    <div class="api-key-container">
-      <div class="api-key-label">
-        <span>Groq API Key (free)</span>
-        <a href="https://console.groq.com/keys" target="_blank">Get key</a>
-      </div>
-      <div class="api-key-input-row">
-        <input type="password" id="groqApiKey" class="api-key-input" placeholder="gsk_...">
-        <button id="toggleApiKey" class="api-key-toggle">Show</button>
-      </div>
-      <div id="apiKeyStatus" class="api-key-status">Enter API key for faster, smarter scoring</div>
-    </div>
-    <label class="checkbox-option">
-      <input type="checkbox" id="useAI" checked>
-      <span>Use AI-powered scoring</span>
-    </label>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Options</div>
-    <label class="checkbox-option">
-      <input type="checkbox" id="showScores">
-      <span>Show vibe scores on tweets</span>
-    </label>
-    <label class="checkbox-option">
-      <input type="checkbox" id="showFloatingBtn" checked>
-      <span>Show floating button on page</span>
-    </label>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Stats</div>
-    <div class="stats three-col">
-      <div class="stat stat-clickable" id="hiddenStat">
-        <div class="stat-value highlight" id="hiddenCount">-</div>
-        <div class="stat-label">Hidden <span class="hint">(click)</span></div>
-      </div>
-      <div class="stat">
-        <div class="stat-value" id="sessionCount">-</div>
-        <div class="stat-label">Processed</div>
-      </div>
-      <div class="stat">
-        <div class="stat-value" id="tweetCount">-</div>
-        <div class="stat-label">Saved</div>
-      </div>
-    </div>
-
-    <!-- Hidden tweets list -->
-    <div class="hidden-tweets-panel" id="hiddenTweetsPanel">
-      <div class="hidden-tweets-header">
-        <span>Recently Hidden</span>
-        <button class="close-btn" id="closeHiddenPanel">&times;</button>
-      </div>
+  <!-- Hidden Tweets Section (expanded by default in popup) -->
+  <div class="collapsible-section">
+    <button class="section-toggle expanded" id="hiddenTweetsToggle">
+      <span class="section-toggle-left">
+        Hidden Tweets <span class="section-count" id="hiddenCountLabel">(0)</span>
+      </span>
+      <span class="toggle-icon">▼</span>
+    </button>
+    <div class="section-content show" id="hiddenTweetsContent">
       <div class="hidden-tweets-list" id="hiddenTweetsList">
         <div class="no-hidden">No tweets hidden yet</div>
       </div>
     </div>
   </div>
 
-  <div class="footer">
-    <a href="#" id="clearData">Clear stored data</a>
+  <!-- Settings & Stats Section (collapsed by default in popup) -->
+  <div class="collapsible-section">
+    <button class="section-toggle" id="settingsToggle">
+      <span class="section-toggle-left">Settings & Stats</span>
+      <span class="toggle-icon">▼</span>
+    </button>
+    <div class="section-content" id="settingsContent">
+      <!-- Filter Active -->
+      <div class="inline-setting">
+        <span class="inline-label">Filter Active</span>
+        <label class="small-toggle">
+          <input type="checkbox" id="enableToggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Filter Mode -->
+      <div class="section" style="margin-bottom: 12px; margin-top: 12px;">
+        <div class="section-title">Filter Mode</div>
+        <div class="mode-buttons">
+          <button class="mode-btn active" data-mode="hide">Hide</button>
+          <button class="mode-btn" data-mode="dim">Dim</button>
+          <button class="mode-btn" data-mode="label">Collapse</button>
+        </div>
+      </div>
+
+      <!-- Threshold -->
+      <div class="section" style="margin-bottom: 12px;">
+        <div class="section-title">Vibe Threshold</div>
+        <div class="slider-container">
+          <div class="slider-header">
+            <span>Filter below score:</span>
+            <span class="slider-value" id="thresholdValue">0</span>
+          </div>
+          <input type="range" id="thresholdSlider" min="-50" max="50" value="0">
+        </div>
+      </div>
+
+      <!-- Show Scores -->
+      <label class="checkbox-option">
+        <input type="checkbox" id="showScores">
+        <span>Show vibe scores on tweets</span>
+      </label>
+
+      <!-- AI Section -->
+      <div class="section" style="margin-bottom: 12px; margin-top: 12px;">
+        <div class="section-title">AI Scoring</div>
+        <div class="ai-status" id="aiStatus">
+          <span class="ai-indicator loading"></span>
+          <span>Checking...</span>
+        </div>
+        <div class="api-key-container">
+          <div class="api-key-label">
+            <span>Groq API Key (free)</span>
+            <a href="https://console.groq.com/keys" target="_blank">Get key</a>
+          </div>
+          <div class="api-key-input-row">
+            <input type="password" id="groqApiKey" class="api-key-input" placeholder="gsk_...">
+            <button id="toggleApiKey" class="api-key-toggle">Show</button>
+          </div>
+          <div id="apiKeyStatus" class="api-key-status">Enter API key for AI scoring</div>
+        </div>
+        <label class="checkbox-option">
+          <input type="checkbox" id="useAI" checked>
+          <span>Use AI-powered scoring</span>
+        </label>
+      </div>
+
+      <!-- Stats -->
+      <div class="section" style="margin-bottom: 12px;">
+        <div class="section-title">Stats</div>
+        <div class="stats three-col">
+          <div class="stat">
+            <div class="stat-value highlight" id="hiddenCount">-</div>
+            <div class="stat-label">Hidden</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="sessionCount">-</div>
+            <div class="stat-label">Processed</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value" id="tweetCount">-</div>
+            <div class="stat-label">Saved</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Show Floating Button -->
+      <label class="checkbox-option">
+        <input type="checkbox" id="showFloatingBtn" checked>
+        <span>Show floating button on page</span>
+      </label>
+
+      <div class="divider"></div>
+
+      <!-- Clear Data -->
+      <button class="clear-btn" id="clearData">Clear stored data</button>
+    </div>
   </div>
 
   <script src="popup.js"></script>
