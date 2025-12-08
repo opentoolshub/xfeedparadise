@@ -185,18 +185,24 @@
 
     // Don't hide the main tweet if user navigated directly to it
     const urlTweetId = getTweetIdFromUrl();
-    const isMainTweet = urlTweetId && tweet.id === urlTweetId;
-    if (isMainTweet) {
-      // Still show the score badge, but never hide
-      if (VibeFilter.settings.showScores) {
-        article.querySelector('.xfp-vibe-indicator')?.remove();
-        const indicator = document.createElement('div');
-        indicator.className = `xfp-vibe-indicator ${vibeLabel.class}`;
-        indicator.innerHTML = `${vibeLabel.label} (${score})`;
-        article.style.position = 'relative';
-        article.prepend(indicator);
+    if (urlTweetId) {
+      // Check if this is the main tweet by ID match OR by being the first tweet on page
+      const allTweets = document.querySelectorAll('article[data-testid="tweet"]');
+      const isFirstTweet = allTweets[0] === article;
+      const isIdMatch = tweet.id === urlTweetId;
+
+      if (isIdMatch || isFirstTweet) {
+        // Still show the score badge, but never hide
+        if (VibeFilter.settings.showScores) {
+          article.querySelector('.xfp-vibe-indicator')?.remove();
+          const indicator = document.createElement('div');
+          indicator.className = `xfp-vibe-indicator ${vibeLabel.class}`;
+          indicator.innerHTML = `${vibeLabel.label} (${score})`;
+          article.style.position = 'relative';
+          article.prepend(indicator);
+        }
+        return; // Don't apply any hiding/dimming
       }
-      return; // Don't apply any hiding/dimming
     }
 
     // Remove any existing vibe indicators
