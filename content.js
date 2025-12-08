@@ -79,9 +79,6 @@
       const tweetId = tweetLink?.href?.match(/status\/(\d+)/)?.[1];
       if (!tweetId) return null;
 
-      // Already processed?
-      if (processedTweets.has(tweetId)) return null;
-
       // Extract author info
       const authorLink = article.querySelector('a[href^="/"][role="link"]:not([href*="/status/"])');
       const authorHandle = authorLink?.href?.split('/').pop() || 'unknown';
@@ -230,13 +227,22 @@
 
   // Process a single tweet element - FAST, non-blocking
   function processTweet(tweetElement) {
+    const article = tweetElement.closest('article[data-testid="tweet"]');
+    if (!article) return;
+
+    // Check if this DOM element already has our marker
+    if (article.dataset.xfpProcessed) {
+      return; // Already processed this exact DOM element
+    }
+
     const tweet = extractTweetData(tweetElement);
     if (!tweet) return;
 
-    // Mark as processed early to avoid duplicate processing
-    processedTweets.add(tweet.id);
+    // Mark this DOM element as processed
+    article.dataset.xfpProcessed = 'true';
 
-    const article = tweetElement.closest('article[data-testid="tweet"]');
+    // Also track by ID (for stats)
+    processedTweets.add(tweet.id);
 
     // Get score with AI refinement callback
     const { score, source } = VibeFilter.getScoreWithRefinement(
@@ -260,9 +266,7 @@
     tweet.scoredWithAI = source === 'ai';
 
     // Apply filter immediately with initial score
-    if (article) {
-      applyFilter(article, tweet, score);
-    }
+    applyFilter(article, tweet, score);
 
     // Save to database (non-blocking)
     window.tweetDB.saveTweet(tweet).catch(error => {
@@ -879,6 +883,11 @@
       updateFloatingPanel();
     }
   }, 500);
+
+  // Periodic scan to catch any missed tweets (fast scrolling, navigation back)
+  setInterval(() => {
+    processVisibleTweets();
+  }, 1000);
 
   // Initialize
   console.log('🌴 XFeed Paradise: Starting tweet observation...');

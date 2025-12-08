@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Scrolling Misses and Badge Disappearing
+
+Sometimes when I scroll quickly it misses some, do you have any idea why? If I click into a Tweet and hit back all the little badges disappear I'm wondering if there's an organic way to fix that
+
+---
+
 ## 2025-12-07 - Debug Mode and Batching Request
 
 By the way at the very least our app should definitely give descriptive error messages when we hit the rate limit if you're in debug mode with the chrome extension, at least which you should be able to change in settings. And let's batch as many as we can, but like I really want this to work at the speed of scrolling if at all possible if you have an idea about how to do this
