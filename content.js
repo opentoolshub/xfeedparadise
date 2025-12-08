@@ -165,12 +165,39 @@
     }
   }
 
+  // Check if we're on a tweet detail page
+  function isOnTweetDetailPage() {
+    return /\/status\/\d+/.test(window.location.pathname);
+  }
+
+  // Get the tweet ID from the current URL (if on detail page)
+  function getTweetIdFromUrl() {
+    const match = window.location.pathname.match(/\/status\/(\d+)/);
+    return match ? match[1] : null;
+  }
+
   // Apply filter to a tweet element
   function applyFilter(article, tweet, score) {
     if (!VibeFilter.settings.enabled) return;
 
     const shouldShow = VibeFilter.shouldShow(score);
     const vibeLabel = VibeFilter.getVibeLabel(score);
+
+    // Don't hide the main tweet if user navigated directly to it
+    const urlTweetId = getTweetIdFromUrl();
+    const isMainTweet = urlTweetId && tweet.id === urlTweetId;
+    if (isMainTweet) {
+      // Still show the score badge, but never hide
+      if (VibeFilter.settings.showScores) {
+        article.querySelector('.xfp-vibe-indicator')?.remove();
+        const indicator = document.createElement('div');
+        indicator.className = `xfp-vibe-indicator ${vibeLabel.class}`;
+        indicator.innerHTML = `${vibeLabel.label} (${score})`;
+        article.style.position = 'relative';
+        article.prepend(indicator);
+      }
+      return; // Don't apply any hiding/dimming
+    }
 
     // Remove any existing vibe indicators
     article.querySelector('.xfp-vibe-indicator')?.remove();

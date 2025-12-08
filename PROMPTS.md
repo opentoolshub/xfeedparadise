@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Don't Hide on Post Detail Page
+
+It shouldn't hide the post If you're actually clicked directly into a post page Even if it has bad vibes
+
+---
+
 ## 2025-12-07 - Robust Zero-Lag Solution
 
 Let's do a robust solution, but like no lag is allowed so debouncing might be challenging
