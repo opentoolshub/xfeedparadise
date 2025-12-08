@@ -279,11 +279,18 @@
 
     // Apply filter mode
     if (!shouldShow) {
-      // Find the best container to hide
-      const container = articleEl.closest('article') ||
-                        articleEl.closest('[data-n-tid]') ||
-                        articleEl.closest('c-wiz') ||
-                        articleEl;
+      // Find the best container to hide - be careful not to hide parent containers
+      // that contain multiple articles. Use data attribute to mark our container.
+      let container = articleEl;
+
+      // Only use article element if it's close to our element
+      const articleParent = articleEl.closest('article');
+      if (articleParent && articleParent.querySelectorAll('h3, h4').length <= 1) {
+        container = articleParent;
+      }
+
+      // Mark with our own attribute to avoid hiding too much
+      container.dataset.xfpArticle = 'true';
 
       const wasAlreadyHidden = container?.classList.contains('xfp-hidden') ||
                                container?.classList.contains('xfp-dimmed') ||
@@ -335,11 +342,11 @@
       }
     } else {
       // Ensure shown articles are visible
-      const container = articleEl.closest('article') ||
-                        articleEl.closest('[data-n-tid]') ||
-                        articleEl.closest('c-wiz') ||
-                        articleEl;
-      container?.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+      articleEl.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+      const articleParent = articleEl.closest('article');
+      if (articleParent) {
+        articleParent.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+      }
     }
   }
 
