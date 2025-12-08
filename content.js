@@ -680,7 +680,7 @@
   }
 
   // Update floating panel content
-  function updateFloatingPanel() {
+  async function updateFloatingPanel() {
     const panel = document.querySelector('.xfp-floating-panel');
     if (!panel) return;
 
@@ -688,22 +688,32 @@
     const list = panel.querySelector('.xfp-dropdown-list');
     const aiDot = panel.querySelector('.xfp-ai-dot');
     const aiText = panel.querySelector('.xfp-ai-text');
+    const hiddenCountLabel = panel.querySelector('.xfp-hidden-count-label');
 
+    // Update badge and hidden count label
     if (badge) {
       badge.textContent = hiddenCount;
       badge.style.display = hiddenCount > 0 ? 'flex' : 'none';
     }
+    if (hiddenCountLabel) {
+      hiddenCountLabel.textContent = `(${hiddenCount})`;
+    }
 
+    // Update AI status
     if (aiDot && aiText) {
       if (aiScorerReady) {
         aiDot.classList.add('ready');
         aiText.textContent = 'AI active';
+      } else if (VibeFilter.settings.useAI !== false) {
+        aiDot.classList.remove('ready');
+        aiText.textContent = aiLoadingProgress > 0 ? `Loading ${aiLoadingProgress}%` : 'Initializing...';
       } else {
         aiDot.classList.remove('ready');
-        aiText.textContent = `AI loading... ${aiLoadingProgress}%`;
+        aiText.textContent = 'AI disabled';
       }
     }
 
+    // Update hidden tweets list
     if (list) {
       if (hiddenTweets.length === 0) {
         list.innerHTML = '<div class="xfp-dropdown-empty">No tweets hidden yet</div>';
@@ -728,12 +738,19 @@
       }
     }
 
-    // Update settings UI to reflect current values
+    // Update filter active checkbox
+    const filterActiveCb = panel.querySelector('.xfp-filter-active-cb');
+    if (filterActiveCb) {
+      filterActiveCb.checked = VibeFilter.settings.enabled !== false;
+    }
+
+    // Update filter mode buttons
     const filterMode = VibeFilter.settings.filterMode || 'hide';
     panel.querySelectorAll('.xfp-filter-modes .xfp-setting-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.mode === filterMode);
     });
 
+    // Update threshold slider
     const thresholdSlider = panel.querySelector('.xfp-threshold-slider');
     const thresholdValue = panel.querySelector('.xfp-threshold-value');
     if (thresholdSlider && thresholdValue) {
@@ -741,15 +758,37 @@
       thresholdValue.textContent = VibeFilter.settings.threshold || 0;
     }
 
+    // Update show scores checkbox
     const showScoresCb = panel.querySelector('.xfp-show-scores-cb');
     if (showScoresCb) {
       showScoresCb.checked = VibeFilter.settings.showScores || false;
     }
 
+    // Update use AI checkbox
+    const useAiCb = panel.querySelector('.xfp-use-ai-cb');
+    if (useAiCb) {
+      useAiCb.checked = VibeFilter.settings.useAI !== false;
+    }
+
+    // Update position buttons
     const position = VibeFilter.settings.floatingPosition || 'bottom-right';
     panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.pos === position);
     });
+
+    // Update stats
+    try {
+      const stats = await window.tweetDB.getStats();
+      const statHidden = panel.querySelector('.xfp-stat-hidden');
+      const statProcessed = panel.querySelector('.xfp-stat-processed');
+      const statSaved = panel.querySelector('.xfp-stat-saved');
+
+      if (statHidden) statHidden.textContent = hiddenCount;
+      if (statProcessed) statProcessed.textContent = processedTweets.size;
+      if (statSaved) statSaved.textContent = stats?.tweetCount || 0;
+    } catch (error) {
+      console.warn('Could not update stats:', error);
+    }
   }
 
   function escapeHtml(text) {

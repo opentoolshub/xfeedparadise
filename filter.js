@@ -19,6 +19,7 @@ const VibeFilter = {
 
   // Groq API key and scorer
   groqApiKey: null,
+  groqDefaultKey: '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',
   groqLastRequest: 0,
   groqMinInterval: 2000, // Min 2 seconds between requests (30 RPM limit)
 
@@ -74,11 +75,11 @@ Tweet: "${text.slice(0, 500)}"`
     }
   },
 
-  // Load Groq API key from storage
+  // Load Groq API key from storage (falls back to default key)
   async loadGroqApiKey() {
     return new Promise((resolve) => {
       chrome.storage.sync.get('groqApiKey', (result) => {
-        this.groqApiKey = result.groqApiKey || null;
+        this.groqApiKey = result.groqApiKey || this.groqDefaultKey;
         resolve(this.groqApiKey);
       });
     });

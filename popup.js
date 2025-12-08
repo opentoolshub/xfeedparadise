@@ -83,6 +83,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (result.groqApiKey) {
       apiKeyInput.value = result.groqApiKey;
       updateApiKeyStatus(result.groqApiKey);
+    } else {
+      // Show that default key is being used
+      updateApiKeyStatus(null, true);
     }
   });
 
@@ -107,13 +110,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
-  function updateApiKeyStatus(apiKey) {
+  function updateApiKeyStatus(apiKey, usingDefault = false) {
     if (apiKey && apiKey.startsWith('gsk_')) {
-      apiKeyStatus.textContent = 'API key saved - using Groq for scoring';
+      apiKeyStatus.textContent = 'Custom API key saved - using Groq';
       apiKeyStatus.className = 'api-key-status connected';
     } else if (apiKey) {
       apiKeyStatus.textContent = 'Invalid key format (should start with gsk_)';
       apiKeyStatus.className = 'api-key-status error';
+    } else if (usingDefault) {
+      apiKeyStatus.textContent = 'Using default API key - Groq active';
+      apiKeyStatus.className = 'api-key-status connected';
     } else {
       apiKeyStatus.textContent = 'Enter API key for faster, smarter scoring';
       apiKeyStatus.className = 'api-key-status';
