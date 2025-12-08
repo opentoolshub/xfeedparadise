@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Robust Zero-Lag Solution
+
+Let's do a robust solution, but like no lag is allowed so debouncing might be challenging
+
+---
+
 ## 2025-12-07 - Scrolling Misses and Badge Disappearing
 
 Sometimes when I scroll quickly it misses some, do you have any idea why? If I click into a Tweet and hit back all the little badges disappear I'm wondering if there's an organic way to fix that

@@ -52,6 +52,23 @@
   let hiddenCount = 0;
   const hiddenTweets = []; // Array of { id, text, author, score, url }
 
+  // IntersectionObserver for viewport detection - catches fast scrolling & recycled elements
+  const viewportObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        const article = entry.target;
+        // Process if not already done
+        if (!article.dataset.xfpProcessed) {
+          processTweet(article);
+        }
+      }
+    }
+  }, {
+    root: null, // viewport
+    rootMargin: '200px', // pre-process 200px before entering viewport
+    threshold: 0
+  });
+
   // Get current user's handle (feed owner)
   function getFeedOwner() {
     // Try to get from the page
@@ -275,9 +292,20 @@
   }
 
   // Process all visible tweets - non-blocking, fires all at once
+  // Register a tweet with the viewport observer and process if visible
+  function registerTweet(article) {
+    if (!article || article.dataset.xfpObserved) return;
+    article.dataset.xfpObserved = 'true';
+    viewportObserver.observe(article);
+    // Also try to process immediately (in case already in viewport)
+    if (!article.dataset.xfpProcessed) {
+      processTweet(article);
+    }
+  }
+
   function processVisibleTweets() {
     const tweets = document.querySelectorAll('article[data-testid="tweet"]');
-    tweets.forEach(tweet => processTweet(tweet));
+    tweets.forEach(tweet => registerTweet(tweet));
   }
 
   // Observe DOM for new tweets
@@ -288,11 +316,11 @@
           if (node.nodeType === Node.ELEMENT_NODE) {
             // Check if the added node contains tweets
             const tweets = node.querySelectorAll?.('article[data-testid="tweet"]') || [];
-            tweets.forEach(tweet => processTweet(tweet));
+            tweets.forEach(tweet => registerTweet(tweet));
 
             // Also check if the node itself is a tweet
             if (node.matches?.('article[data-testid="tweet"]')) {
-              processTweet(node);
+              registerTweet(node);
             }
           }
         }
@@ -884,13 +912,8 @@
     }
   }, 500);
 
-  // Periodic scan to catch any missed tweets (fast scrolling, navigation back)
-  setInterval(() => {
-    processVisibleTweets();
-  }, 1000);
-
-  // Initialize
-  console.log('🌴 XFeed Paradise: Starting tweet observation...');
+  // Initialize - IntersectionObserver handles fast scrolling, no polling needed
+  console.log('🌴 XFeed Paradise: Starting tweet observation (dual observer mode)...');
   processVisibleTweets();
   observeTweets();
 
