@@ -277,34 +277,21 @@
       articleEl.prepend(indicator);
     }
 
-    // Apply filter mode
+    // Apply filter mode - apply directly to the element, don't traverse up
     if (!shouldShow) {
-      // Find the best container to hide - be careful not to hide parent containers
-      // that contain multiple articles. Use data attribute to mark our container.
-      let container = articleEl;
-
-      // Only use article element if it's close to our element
-      const articleParent = articleEl.closest('article');
-      if (articleParent && articleParent.querySelectorAll('h3, h4').length <= 1) {
-        container = articleParent;
-      }
-
-      // Mark with our own attribute to avoid hiding too much
-      container.dataset.xfpArticle = 'true';
-
-      const wasAlreadyHidden = container?.classList.contains('xfp-hidden') ||
-                               container?.classList.contains('xfp-dimmed') ||
-                               container?.classList.contains('xfp-labeled');
+      const wasAlreadyHidden = articleEl.classList.contains('xfp-hidden') ||
+                               articleEl.classList.contains('xfp-dimmed') ||
+                               articleEl.classList.contains('xfp-labeled');
 
       switch (VibeFilter.settings.filterMode) {
         case 'hide':
-          container?.classList.add('xfp-hidden');
+          articleEl.classList.add('xfp-hidden');
           break;
         case 'dim':
-          container?.classList.add('xfp-dimmed');
+          articleEl.classList.add('xfp-dimmed');
           break;
         case 'label':
-          container?.classList.add('xfp-labeled');
+          articleEl.classList.add('xfp-labeled');
           if (!articleEl.querySelector('.xfp-warning-label')) {
             const warning = document.createElement('div');
             warning.className = 'xfp-warning-label';
@@ -314,7 +301,7 @@
             `;
             warning.querySelector('.xfp-show-anyway').addEventListener('click', (e) => {
               e.stopPropagation();
-              container?.classList.remove('xfp-labeled');
+              articleEl.classList.remove('xfp-labeled');
               warning.remove();
               hiddenCount = Math.max(0, hiddenCount - 1);
             });
@@ -343,24 +330,17 @@
     } else {
       // Ensure shown articles are visible
       articleEl.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
-      const articleParent = articleEl.closest('article');
-      if (articleParent) {
-        articleParent.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
-      }
     }
   }
 
   // Process a single article element
   function processArticle(articleElement) {
-    const articleContainer = articleElement.closest('article') ||
-                             articleElement.closest('[data-n-tid]') ||
-                             articleElement.closest('c-wiz[data-n-au]') ||
-                             articleElement;
-
-    if (!articleContainer) return;
+    // Don't go up to find containers - use the element we found directly
+    // This prevents accidentally selecting parent containers
+    if (!articleElement) return;
 
     // Check if already processed
-    if (articleContainer.dataset.xfpProcessed) {
+    if (articleElement.dataset.xfpProcessed) {
       return;
     }
 
@@ -368,7 +348,8 @@
     if (!article) return;
 
     // Mark as processed
-    articleContainer.dataset.xfpProcessed = 'true';
+    articleElement.dataset.xfpProcessed = 'true';
+    articleElement.dataset.xfpArticle = 'true'; // Mark for CSS targeting
     processedArticles.add(article.id);
 
     // Get score with AI refinement callback
@@ -376,10 +357,10 @@
       article.id,
       article.text,
       (aiScore, aiSource) => {
-        if (articleContainer && articleContainer.isConnected) {
+        if (articleElement && articleElement.isConnected) {
           article.vibeScore = aiScore;
           article.scoredWithAI = true;
-          applyFilter(articleContainer, article, aiScore);
+          applyFilter(articleElement, article, aiScore);
           updateFloatingPanel();
 
           // Update in database
@@ -392,7 +373,7 @@
     article.scoredWithAI = source === 'ai';
 
     // Apply filter immediately with initial score
-    applyFilter(articleContainer, article, score);
+    applyFilter(articleElement, article, score);
 
     // Save to database
     window.tweetDB.saveTweet(article).catch(error => {
@@ -413,36 +394,41 @@
 
   // Process all visible articles
   function processVisibleArticles() {
-    // Google News article selectors
-    const selectors = [
-      'article',
-      'c-wiz[data-n-au]',
-      '[data-n-tid]'
-    ];
+    // Find all headlines first, then process their containers
+    // This is more reliable than trying to guess article container selectors
+    const headlines = document.querySelectorAll('h3 a[href*="/articles/"], h4 a[href*="/articles/"], a[href*="/articles/"] h3, a[href*="/articles/"] h4');
 
-    selectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(el => registerArticle(el));
+    headlines.forEach(headline => {
+      // Find the closest reasonable container for this headline
+      // Go up max 5 levels to find a container, but stop at main/section
+      let container = headline;
+      for (let i = 0; i < 5; i++) {
+        const parent = container.parentElement;
+        if (!parent || parent.tagName === 'MAIN' || parent.tagName === 'SECTION' || parent.tagName === 'BODY') {
+          break;
+        }
+        // Stop if parent contains multiple headlines (it's a list container)
+        const headlinesInParent = parent.querySelectorAll('h3, h4');
+        if (headlinesInParent.length > 1) {
+          break;
+        }
+        container = parent;
+      }
+
+      if (container && !container.dataset.xfpObserved) {
+        registerArticle(container);
+      }
     });
   }
 
   // Observe DOM for new articles
   function observeArticles() {
     const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            // Check for articles in added nodes
-            const articles = node.querySelectorAll?.('article, c-wiz[data-n-au], [data-n-tid]') || [];
-            articles.forEach(article => registerArticle(article));
-
-            // Check if the node itself is an article
-            if (node.matches?.('article, c-wiz[data-n-au], [data-n-tid]')) {
-              registerArticle(node);
-            }
-          }
-        }
-      }
+      // Debounce processing
+      clearTimeout(observer._timeout);
+      observer._timeout = setTimeout(() => {
+        processVisibleArticles();
+      }, 100);
     });
 
     observer.observe(document.body, {
