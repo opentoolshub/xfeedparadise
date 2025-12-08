@@ -9,8 +9,9 @@
   const GOOGLE_NEWS_ENABLED_KEY = 'xfp_google_news_enabled';
 
   // Check feature flag before initializing
+  // DEV: Temporarily defaulting to true for testing. Change back to === true before release.
   const flagResult = await chrome.storage.sync.get(GOOGLE_NEWS_ENABLED_KEY);
-  const isEnabled = flagResult[GOOGLE_NEWS_ENABLED_KEY] === true;
+  const isEnabled = flagResult[GOOGLE_NEWS_ENABLED_KEY] !== false; // Default ON for testing
 
   if (!isEnabled) {
     console.log('🌴 XFeed Paradise: Google News support is disabled. Enable it in settings.');
@@ -130,9 +131,9 @@
       // Use the element directly - don't traverse up
       if (!element) return null;
 
-      // Google News structure: the headline IS the link text
-      // Links use /read/ URLs, and the text content is the headline
-      const linkEl = element.querySelector('a[href*="/read/"]');
+      // Use the stored headline link if available (passed from processVisibleArticles)
+      // Otherwise fall back to searching within the element
+      const linkEl = element._xfpHeadlineLink || element.querySelector('a[href*="/read/"]');
 
       if (!linkEl) {
         console.log('🌴 XFP Debug: No /read/ link found in element');
@@ -396,9 +397,11 @@
   }
 
   // Register an article with the viewport observer
-  function registerArticle(element) {
+  function registerArticle(element, headlineLink) {
     if (!element || element.dataset.xfpObserved) return;
     element.dataset.xfpObserved = 'true';
+    // Store the headline link reference so extraction uses the right one
+    element._xfpHeadlineLink = headlineLink;
     viewportObserver.observe(element);
     // Also try to process immediately
     if (!element.dataset.xfpProcessed) {
@@ -426,6 +429,9 @@
         return;
       }
 
+      // Mark this specific link as observed
+      link.dataset.xfpObserved = 'true';
+
       // Find a reasonable container - go up a few levels
       // but stop before we get to containers with many articles
       let container = link;
@@ -443,7 +449,8 @@
       }
 
       console.log('🌴 XFP Debug: Registering article:', linkText.slice(0, 50));
-      registerArticle(container);
+      // Pass the original headline link so extraction uses it directly
+      registerArticle(container, link);
     });
 
     console.log('🌴 XFP Debug: Total processed articles:', processedArticles.size);
