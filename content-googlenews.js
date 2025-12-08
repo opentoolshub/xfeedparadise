@@ -379,7 +379,15 @@
           updateFloatingPanel();
 
           // Update in database
-          window.tweetDB.saveTweet({ ...article, vibeScore: aiScore, scoredWithAI: true }).catch(() => {});
+          const articleWithAI = { ...article, vibeScore: aiScore, scoredWithAI: true };
+          window.tweetDB.saveTweet(articleWithAI).catch(() => {});
+
+          // Queue for backend sync (AI-scored version preferred)
+          window.tweetDB.queueForSync({
+            ...articleWithAI,
+            authorHandle: article.authorId, // Source/publication name
+            wasHidden: !VibeFilter.shouldShow(aiScore)
+          });
         }
       }
     );

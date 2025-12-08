@@ -129,6 +129,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
+  // Sync toggle
+  const syncToggle = document.getElementById('syncEnabled');
+
+  // Load sync setting
+  chrome.storage.sync.get(['xfp_sync_enabled'], (result) => {
+    // Sync defaults to ON
+    syncToggle.checked = result.xfp_sync_enabled !== false;
+  });
+
+  // Save sync setting
+  syncToggle.addEventListener('change', async (e) => {
+    await chrome.storage.sync.set({ xfp_sync_enabled: e.target.checked });
+  });
+
   document.getElementById('useAI').addEventListener('change', async (e) => {
     await saveSettings({ useAI: e.target.checked });
     sendToContentScript({ type: 'UPDATE_SETTINGS', settings: { useAI: e.target.checked } });

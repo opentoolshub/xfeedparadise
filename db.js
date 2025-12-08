@@ -4,6 +4,10 @@ const DB_VERSION = 2; // Bumped for source index
 const TWEETS_STORE = 'tweets';
 const USERS_STORE = 'users';
 
+// Supabase backend configuration
+const SUPABASE_URL = 'https://your-project.supabase.co'; // TODO: Replace with actual URL
+const SUPABASE_ANON_KEY = 'your-anon-key'; // TODO: Replace with actual key
+
 class TweetDatabase {
   constructor() {
     this.db = null;
@@ -180,6 +184,152 @@ class TweetDatabase {
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
     });
+  }
+
+  // =====================
+  // Backend Sync Methods
+  // =====================
+
+  // Get or create anonymous user ID for this extension install
+  async getAnonymousId() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('xfp_anonymous_id', (result) => {
+        if (result.xfp_anonymous_id) {
+          resolve(result.xfp_anonymous_id);
+        } else {
+          // Generate a random ID
+          const id = 'xfp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+          chrome.storage.local.set({ xfp_anonymous_id: id });
+          resolve(id);
+        }
+      });
+    });
+  }
+
+  // Check if sync is enabled
+  async isSyncEnabled() {
+    return new Promise((resolve) => {
+      chrome.storage.sync.get('xfp_sync_enabled', (result) => {
+        // Default to ON
+        resolve(result.xfp_sync_enabled !== false);
+      });
+    });
+  }
+
+  // Upsert user and get user ID from backend
+  async getOrCreateBackendUserId() {
+    const anonymousId = await this.getAnonymousId();
+
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ p_anonymous_id: anonymousId })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend error: ${response.status}`);
+      }
+
+      const userId = await response.json();
+      return userId;
+    } catch (error) {
+      console.error('[XFP] Failed to get backend user ID:', error);
+      return null;
+    }
+  }
+
+  // Sync items to backend
+  async syncToBackend(items) {
+    const syncEnabled = await this.isSyncEnabled();
+    if (!syncEnabled) {
+      console.log('[XFP] Sync disabled, skipping backend upload');
+      return false;
+    }
+
+    if (!items || items.length === 0) {
+      return true;
+    }
+
+    const userId = await this.getOrCreateBackendUserId();
+    if (!userId) {
+      console.error('[XFP] Cannot sync: no backend user ID');
+      return false;
+    }
+
+    try {
+      // Transform items to backend format
+      const backendItems = items.map(item => ({
+        external_id: item.id,
+        source: item.source || 'twitter',
+        user_id: userId,
+        text: item.text,
+        headline: item.headline || null,
+        snippet: item.snippet || null,
+        url: item.url || null,
+        author_id: item.authorId || null,
+        author_name: item.authorName || null,
+        author_handle: item.authorHandle || null,
+        vibe_score: item.vibeScore || null,
+        scored_with_ai: item.scoredWithAI || false,
+        was_hidden: item.wasHidden || false,
+        likes: item.likes || null,
+        retweets: item.retweets || null,
+        replies: item.replies || null,
+        original_timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : null
+      }));
+
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/items`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        body: JSON.stringify(backendItems)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend sync error: ${response.status}`);
+      }
+
+      console.log(`[XFP] Synced ${items.length} items to backend`);
+      return true;
+    } catch (error) {
+      console.error('[XFP] Backend sync failed:', error);
+      return false;
+    }
+  }
+
+  // Queue items for batch sync (called after scoring)
+  syncQueue = [];
+  syncTimeout = null;
+
+  queueForSync(item) {
+    this.syncQueue.push(item);
+
+    // Debounce sync - wait 5 seconds for more items
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout);
+    }
+
+    this.syncTimeout = setTimeout(() => {
+      this.flushSyncQueue();
+    }, 5000);
+  }
+
+  async flushSyncQueue() {
+    if (this.syncQueue.length === 0) return;
+
+    const items = [...this.syncQueue];
+    this.syncQueue = [];
+
+    await this.syncToBackend(items);
   }
 }
 
