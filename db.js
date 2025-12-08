@@ -5,8 +5,8 @@ const TWEETS_STORE = 'tweets';
 const USERS_STORE = 'users';
 
 // Supabase backend configuration
-const SUPABASE_URL = 'https://your-project.supabase.co'; // TODO: Replace with actual URL
-const SUPABASE_ANON_KEY = 'your-anon-key'; // TODO: Replace with actual key
+const SUPABASE_URL = 'https://xvexqhejjdcysxgxanlm.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_aH6fgWyLdZO6mKILaErqsQ_5mJZN2du';
 
 class TweetDatabase {
   constructor() {
@@ -225,8 +225,8 @@ class TweetDatabase {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+          'apikey': SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
         },
         body: JSON.stringify({ p_anonymous_id: anonymousId })
       });
@@ -287,8 +287,8 @@ class TweetDatabase {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
           'Prefer': 'resolution=merge-duplicates'
         },
         body: JSON.stringify(backendItems)
