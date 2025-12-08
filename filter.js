@@ -22,7 +22,11 @@ const VibeFilter = {
   groqDefaultKey: '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',
   customPrompt: null,
   groqLastRequest: 0,
-  groqMinInterval: 2000, // Min 2 seconds between requests (30 RPM limit)
+  groqMinInterval: 2500, // Min 2.5 seconds between requests (24 RPM to stay under 30 RPM limit)
+  groqQueue: [], // Queue of pending requests
+  groqProcessing: false, // Whether we're currently processing the queue
+  groqRateLimited: false, // Whether we're currently rate limited
+  groqRateLimitReset: 0, // When the rate limit resets
   groqUsage: {
     requestsLimit: null,
     requestsRemaining: null,
@@ -34,66 +38,128 @@ const VibeFilter = {
   // Default system prompt
   defaultPrompt: `Rate the sentiment/vibe of this tweet from -100 (very negative, toxic, outrage-bait) to +100 (very positive, uplifting, enlightening). Consider: Is it angry/divisive? Does it use inflammatory language? Is it spreading fear or hate? Or is it kind, helpful, educational, or inspiring? Reply with ONLY a single integer number, nothing else.`,
 
-  // Groq API scorer
+  // Groq API scorer - adds request to queue and returns promise
   async scoreWithGroq(text) {
     if (!this.groqApiKey) return null;
 
-    // Rate limiting - wait if needed
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.groqLastRequest;
-    if (timeSinceLastRequest < this.groqMinInterval) {
-      await new Promise(resolve => setTimeout(resolve, this.groqMinInterval - timeSinceLastRequest));
+    // If we're rate limited, check if we can retry
+    if (this.groqRateLimited) {
+      if (Date.now() < this.groqRateLimitReset) {
+        console.log('🌴 Groq rate limited, using keyword scoring');
+        return null; // Fall back to keyword scoring
+      }
+      this.groqRateLimited = false;
     }
-    this.groqLastRequest = Date.now();
 
-    // Use custom prompt if available, otherwise default
-    const promptText = this.customPrompt || this.defaultPrompt;
+    // Add to queue and return promise
+    return new Promise((resolve) => {
+      this.groqQueue.push({ text, resolve });
+      this.processGroqQueue();
+    });
+  },
 
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.groqApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [{
-            role: 'user',
-            content: `${promptText}\n\nTweet: "${text.slice(0, 500)}"`
-          }],
-          temperature: 0,
-          max_tokens: 10
-        })
-      });
+  // Process the Groq request queue one at a time
+  async processGroqQueue() {
+    if (this.groqProcessing || this.groqQueue.length === 0) return;
+    this.groqProcessing = true;
 
-      // Capture rate limit headers
-      this.groqUsage = {
-        requestsLimit: parseInt(response.headers.get('x-ratelimit-limit-requests')) || null,
-        requestsRemaining: parseInt(response.headers.get('x-ratelimit-remaining-requests')) || null,
-        tokensRemaining: parseInt(response.headers.get('x-ratelimit-remaining-tokens')) || null,
-        requestsReset: response.headers.get('x-ratelimit-reset-requests') || null,
-        lastUpdated: Date.now()
-      };
+    while (this.groqQueue.length > 0) {
+      // Check rate limit
+      if (this.groqRateLimited && Date.now() < this.groqRateLimitReset) {
+        // Resolve all pending with null (fall back to keywords)
+        while (this.groqQueue.length > 0) {
+          const { resolve } = this.groqQueue.shift();
+          resolve(null);
+        }
+        break;
+      }
+      this.groqRateLimited = false;
 
-      if (!response.ok) {
-        console.warn('Groq API error:', response.status);
-        return null;
+      // Rate limiting - wait if needed
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.groqLastRequest;
+      if (timeSinceLastRequest < this.groqMinInterval) {
+        await new Promise(r => setTimeout(r, this.groqMinInterval - timeSinceLastRequest));
       }
 
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content?.trim();
-      const score = parseInt(content, 10);
+      const { text, resolve } = this.groqQueue.shift();
+      this.groqLastRequest = Date.now();
 
-      if (!isNaN(score) && score >= -100 && score <= 100) {
-        return score;
+      // Use custom prompt if available, otherwise default
+      const promptText = this.customPrompt || this.defaultPrompt;
+
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${this.groqApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'llama-3.1-8b-instant',
+            messages: [{
+              role: 'user',
+              content: `${promptText}\n\nTweet: "${text.slice(0, 500)}"`
+            }],
+            temperature: 0,
+            max_tokens: 10
+          })
+        });
+
+        // Capture rate limit headers
+        this.groqUsage = {
+          requestsLimit: parseInt(response.headers.get('x-ratelimit-limit-requests')) || null,
+          requestsRemaining: parseInt(response.headers.get('x-ratelimit-remaining-requests')) || null,
+          tokensRemaining: parseInt(response.headers.get('x-ratelimit-remaining-tokens')) || null,
+          requestsReset: response.headers.get('x-ratelimit-reset-requests') || null,
+          lastUpdated: Date.now()
+        };
+
+        if (response.status === 429) {
+          // Rate limited - parse reset time from header or wait 60 seconds
+          const resetHeader = response.headers.get('x-ratelimit-reset-requests');
+          const waitTime = resetHeader ? this.parseResetTime(resetHeader) : 60000;
+          console.warn(`🌴 Groq rate limited, waiting ${Math.round(waitTime/1000)}s`);
+          this.groqRateLimited = true;
+          this.groqRateLimitReset = Date.now() + waitTime;
+          resolve(null);
+          continue;
+        }
+
+        if (!response.ok) {
+          console.warn('Groq API error:', response.status);
+          resolve(null);
+          continue;
+        }
+
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        const score = parseInt(content, 10);
+
+        if (!isNaN(score) && score >= -100 && score <= 100) {
+          resolve(score);
+        } else {
+          console.warn('Groq returned invalid score:', content);
+          resolve(null);
+        }
+      } catch (error) {
+        console.error('Groq API error:', error);
+        resolve(null);
       }
-      console.warn('Groq returned invalid score:', content);
-      return null;
-    } catch (error) {
-      console.error('Groq API error:', error);
-      return null;
     }
+
+    this.groqProcessing = false;
+  },
+
+  // Parse reset time from header (e.g., "2s" or "1m30s")
+  parseResetTime(resetHeader) {
+    if (!resetHeader) return 60000;
+    let ms = 0;
+    const minMatch = resetHeader.match(/(\d+)m/);
+    const secMatch = resetHeader.match(/(\d+)s/);
+    if (minMatch) ms += parseInt(minMatch[1]) * 60000;
+    if (secMatch) ms += parseInt(secMatch[1]) * 1000;
+    return ms || 60000;
   },
 
   // Load Groq API key and prompt from storage

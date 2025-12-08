@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Groq Rate Limit Error
+
+As I'm going through the app, I get this error is a rate limit or something Groq API error: 429
+
+---
+
 ## 2025-12-07 - Filtering Not Working
 
 Also, can you look at the app and figure out why when I'm using it? It's not actually working like it's not hiding or filtering anything
