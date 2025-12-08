@@ -1,5 +1,11 @@
 # User Prompts Log
 
+## 2025-12-07 - Local Project Only
+
+I wanted it only for our local file our local project not uni
+
+---
+
 ## 2025-12-07 - Prompt Logging Setup
 
 I would like you to head the prompts in prompt. MD every time. Should we put them in claude.MD or something or what's the
