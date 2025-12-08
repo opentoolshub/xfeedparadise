@@ -8,6 +8,14 @@ const USERS_STORE = 'users';
 const SUPABASE_URL = 'https://xvexqhejjdcysxgxanlm.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_aH6fgWyLdZO6mKILaErqsQ_5mJZN2du';
 
+// Fetch with timeout to prevent hanging when backend is down
+function fetchWithTimeout(url, options, timeout = 10000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(id));
+}
+
 class TweetDatabase {
   constructor() {
     this.db = null;
@@ -221,7 +229,7 @@ class TweetDatabase {
     const anonymousId = await this.getAnonymousId();
 
     try {
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/upsert_user`, {
+      const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/rpc/upsert_user`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -283,7 +291,7 @@ class TweetDatabase {
         original_timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : null
       }));
 
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/items`, {
+      const response = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
