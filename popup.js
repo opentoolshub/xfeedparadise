@@ -111,10 +111,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load site settings
   chrome.storage.sync.get(['xfp_twitter_enabled', 'xfp_google_news_enabled'], (result) => {
-    // Twitter defaults to ON
+    // Both default to ON
     twitterToggle.checked = result.xfp_twitter_enabled !== false;
-    // Google News defaults to OFF
-    googleNewsToggle.checked = result.xfp_google_news_enabled === true;
+    googleNewsToggle.checked = result.xfp_google_news_enabled !== false;
   });
 
   // Save Twitter setting
