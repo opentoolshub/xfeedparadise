@@ -13,6 +13,7 @@
 
   // Initialize AI Scorer
   let aiScorerReady = false;
+  let aiLoadingProgress = 0;
   async function initAIScorer() {
     try {
       console.log('🌴 XFeed Paradise: Loading AI model...');
@@ -26,7 +27,8 @@
         'Xenova/distilbert-base-uncased-finetuned-sst-2-english',
         { progress_callback: (progress) => {
           if (progress.status === 'progress') {
-            console.log(`🌴 AI Model loading: ${Math.round(progress.progress)}%`);
+            aiLoadingProgress = Math.round(progress.progress);
+            console.log(`🌴 AI Model loading: ${aiLoadingProgress}%`);
           }
         }}
       );
@@ -72,6 +74,9 @@
 
   // Track processed tweets to avoid duplicates
   const processedTweets = new Set();
+
+  // Track hidden tweet count
+  let hiddenCount = 0;
 
   // Get current user's handle (feed owner)
   function getFeedOwner() {
@@ -193,15 +198,20 @@
 
     // Apply filter mode
     if (!shouldShow) {
+      const container = article.closest('[data-testid="cellInnerDiv"]');
+      const wasAlreadyHidden = container?.classList.contains('xfp-hidden') ||
+                               container?.classList.contains('xfp-dimmed') ||
+                               container?.classList.contains('xfp-labeled');
+
       switch (VibeFilter.settings.filterMode) {
         case 'hide':
-          article.closest('[data-testid="cellInnerDiv"]')?.classList.add('xfp-hidden');
+          container?.classList.add('xfp-hidden');
           break;
         case 'dim':
-          article.closest('[data-testid="cellInnerDiv"]')?.classList.add('xfp-dimmed');
+          container?.classList.add('xfp-dimmed');
           break;
         case 'label':
-          article.closest('[data-testid="cellInnerDiv"]')?.classList.add('xfp-labeled');
+          container?.classList.add('xfp-labeled');
           if (!article.querySelector('.xfp-warning-label')) {
             const warning = document.createElement('div');
             warning.className = 'xfp-warning-label';
@@ -213,10 +223,16 @@
               e.stopPropagation();
               article.closest('[data-testid="cellInnerDiv"]')?.classList.remove('xfp-labeled');
               warning.remove();
+              hiddenCount = Math.max(0, hiddenCount - 1);
             });
             article.prepend(warning);
           }
           break;
+      }
+
+      // Increment hidden count only if newly hidden
+      if (!wasAlreadyHidden) {
+        hiddenCount++;
       }
     } else {
       // Ensure shown tweets are visible
@@ -296,13 +312,14 @@
       sendResponse({ success: true });
     } else if (message.type === 'GET_STATS') {
       window.tweetDB.getStats().then(stats => {
-        sendResponse({ stats, processedCount: processedTweets.size });
+        sendResponse({ stats, processedCount: processedTweets.size, hiddenCount });
       });
       return true; // Keep channel open for async response
     } else if (message.type === 'GET_AI_STATUS') {
       sendResponse({
         aiReady: aiScorerReady,
-        aiLoading: !aiScorerReady && VibeFilter.settings.useAI
+        aiLoading: !aiScorerReady && VibeFilter.settings.useAI,
+        aiProgress: aiLoadingProgress
       });
     } else if (message.type === 'TOGGLE_ENABLED') {
       VibeFilter.settings.enabled = message.enabled;
@@ -321,8 +338,9 @@
       container.querySelector('.xfp-warning-label')?.remove();
     });
 
-    // Clear processed set to force reprocessing
+    // Reset counts and reprocess
     processedTweets.clear();
+    hiddenCount = 0;
     processVisibleTweets();
   }
 

@@ -113,10 +113,12 @@ async function updateStats() {
       if (response) {
         document.getElementById('tweetCount').textContent = response.stats?.tweetCount || 0;
         document.getElementById('sessionCount').textContent = response.processedCount || 0;
+        document.getElementById('hiddenCount').textContent = response.hiddenCount || 0;
       }
     } catch (error) {
       document.getElementById('tweetCount').textContent = '-';
       document.getElementById('sessionCount').textContent = '-';
+      document.getElementById('hiddenCount').textContent = '-';
     }
   }
 }
@@ -150,7 +152,10 @@ async function updateAIStatus() {
           text.textContent = 'AI model active';
         } else if (response.aiLoading) {
           indicator.className = 'ai-indicator loading';
-          text.textContent = 'Loading AI model...';
+          const progress = response.aiProgress || 0;
+          text.textContent = `Loading AI model... ${progress}%`;
+          // Poll for updates while loading
+          setTimeout(updateAIStatus, 500);
         } else {
           indicator.className = 'ai-indicator error';
           text.textContent = 'AI unavailable (using keywords)';

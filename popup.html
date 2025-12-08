@@ -180,6 +180,10 @@
       gap: 12px;
     }
 
+    .stats.three-col {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
     .stat {
       text-align: center;
     }
@@ -188,6 +192,12 @@
       font-size: 24px;
       font-weight: 700;
       background: linear-gradient(135deg, #a78bfa 0%, #60a5fa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stat-value.highlight {
+      background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -352,15 +362,19 @@
   </div>
 
   <div class="section">
-    <div class="section-title">Database Stats</div>
-    <div class="stats">
+    <div class="section-title">Stats</div>
+    <div class="stats three-col">
       <div class="stat">
-        <div class="stat-value" id="tweetCount">-</div>
-        <div class="stat-label">Tweets Saved</div>
+        <div class="stat-value highlight" id="hiddenCount">-</div>
+        <div class="stat-label">Hidden</div>
       </div>
       <div class="stat">
         <div class="stat-value" id="sessionCount">-</div>
-        <div class="stat-label">This Session</div>
+        <div class="stat-label">Processed</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value" id="tweetCount">-</div>
+        <div class="stat-label">Saved</div>
       </div>
     </div>
   </div>
