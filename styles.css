@@ -7,7 +7,7 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* Position variants */
+/* Position variants - Default (shifted up for X/Twitter compose button) */
 .xfp-floating-panel.pos-bottom-right {
   bottom: 143px;
   right: 20px;
@@ -15,6 +15,17 @@
 
 .xfp-floating-panel.pos-bottom-left {
   bottom: 143px;
+  left: 20px;
+}
+
+/* Google News - true bottom positioning (no compose button to avoid) */
+.xfp-floating-panel.site-googlenews.pos-bottom-right {
+  bottom: 20px;
+  right: 20px;
+}
+
+.xfp-floating-panel.site-googlenews.pos-bottom-left {
+  bottom: 20px;
   left: 20px;
 }
 

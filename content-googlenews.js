@@ -561,7 +561,7 @@
     const isHidden = VibeFilter.settings.floatingHidden || false;
 
     const panel = document.createElement('div');
-    panel.className = `xfp-floating-panel pos-${position}`;
+    panel.className = `xfp-floating-panel site-googlenews pos-${position}`;
     if (isHidden) panel.classList.add('hidden');
 
     panel.innerHTML = `
@@ -787,7 +787,7 @@
       btn.addEventListener('click', () => {
         panel.querySelectorAll('.xfp-positions .xfp-setting-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        panel.className = `xfp-floating-panel pos-${btn.dataset.pos}`;
+        panel.className = `xfp-floating-panel site-googlenews pos-${btn.dataset.pos}`;
         VibeFilter.settings.floatingPosition = btn.dataset.pos;
         VibeFilter.saveSettings({ floatingPosition: btn.dataset.pos });
       });
