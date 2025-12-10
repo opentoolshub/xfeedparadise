@@ -584,46 +584,6 @@
               </div>
             </div>
 
-            <!-- Show Scores -->
-            <div class="xfp-setting-row">
-              <label class="xfp-checkbox-row">
-                <input type="checkbox" class="xfp-show-scores-cb">
-                <span>Show vibe scores on tweets</span>
-              </label>
-            </div>
-
-            <!-- Debug Mode -->
-            <div class="xfp-setting-row">
-              <label class="xfp-checkbox-row">
-                <input type="checkbox" class="xfp-debug-mode-cb">
-                <span>Debug mode (console logs)</span>
-              </label>
-            </div>
-
-            <!-- AI Status & Toggle -->
-            <div class="xfp-setting-row xfp-ai-row">
-              <label class="xfp-checkbox-row">
-                <input type="checkbox" class="xfp-use-ai-cb" checked>
-                <span>Use AI scoring</span>
-              </label>
-              <div class="xfp-ai-status-inline">
-                <span class="xfp-ai-dot"></span>
-                <span class="xfp-ai-text">Loading...</span>
-              </div>
-              <button class="xfp-gear-btn" title="AI Settings">
-                <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-              </button>
-            </div>
-
-            <!-- API Key Section (Hidden under gear) -->
-            <div class="xfp-api-key-container">
-              <label class="xfp-setting-label">Groq API Key <a href="https://console.groq.com/keys" target="_blank" style="color: #60a5fa; text-decoration: none;">(Get key)</a></label>
-              <input type="password" class="xfp-api-input" placeholder="gsk_...">
-              <div class="xfp-setting-label" style="font-size: 10px; opacity: 0.7; margin-top: 4px;">Enter key for faster AI scoring</div>
-            </div>
-
-            <div class="xfp-divider"></div>
-
             <!-- Threshold -->
             <div class="xfp-setting-row">
               <label class="xfp-setting-label">Vibe Threshold</label>
@@ -633,23 +593,55 @@
               </div>
             </div>
 
-            <!-- Custom Prompt Section (at bottom of filter settings) -->
-            <div class="xfp-prompt-section-inline">
-              <label class="xfp-setting-label">✨ Customize AI Prompt</label>
-              <div class="xfp-prompt-hint">Tell the AI what tweets to show!</div>
-              <textarea class="xfp-prompt-input-main" placeholder="Example: Show me tweets about technology, science, and personal growth. Hide political arguments and outrage bait."></textarea>
-              <div class="xfp-prompt-actions-row">
-                <button class="xfp-prompt-save">Save</button>
-                <button class="xfp-prompt-cancel">Cancel</button>
-                <div class="xfp-prompt-more">
-                  <button class="xfp-prompt-more-btn" title="More options">⋯</button>
-                  <div class="xfp-prompt-menu">
-                    <button class="xfp-prompt-reset">Reset to Default</button>
-                  </div>
-                </div>
-              </div>
-              <div class="xfp-prompt-status"></div>
+            <!-- Show Scores -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-show-scores-cb">
+                <span>Show vibe scores on tweets</span>
+              </label>
             </div>
+
+            <div class="xfp-divider"></div>
+
+            <!-- AI Scoring Section -->
+            <div class="xfp-setting-row">
+              <label class="xfp-setting-label">AI Scoring</label>
+            </div>
+
+            <!-- AI Status -->
+            <div class="xfp-setting-row xfp-ai-status-row">
+              <div class="xfp-ai-status-inline">
+                <span class="xfp-ai-dot"></span>
+                <span class="xfp-ai-text">Groq AI active</span>
+              </div>
+            </div>
+
+            <!-- Use AI Toggle -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-use-ai-cb" checked>
+                <span>Use AI-powered scoring</span>
+              </label>
+            </div>
+
+            <!-- API Key Section (always visible) -->
+            <div class="xfp-api-key-section">
+              <label class="xfp-setting-label">Groq API Key (free) <a href="https://console.groq.com/keys" target="_blank" style="color: #60a5fa; text-decoration: none; font-size: 10px;">Get key</a></label>
+              <div class="xfp-api-input-row">
+                <input type="password" class="xfp-api-input" placeholder="gsk_...">
+                <button class="xfp-api-toggle-btn">Show</button>
+              </div>
+              <div class="xfp-api-status">Using default API key - Groq active</div>
+            </div>
+
+            <!-- Custom Prompt Section (always visible) -->
+            <div class="xfp-prompt-section">
+              <label class="xfp-setting-label">Custom Prompt (Optional)</label>
+              <textarea class="xfp-prompt-input" placeholder="Rate the sentiment/vibe of this tweet from -100 (very negative, toxic, outrage-bait) to +100 (very positive, uplifting, enlightening)."></textarea>
+              <div class="xfp-prompt-hint">Leave empty to use default. Must ask for a number -100 to 100.</div>
+            </div>
+
+            <div class="xfp-divider"></div>
 
             <!-- Stats -->
             <div class="xfp-setting-row xfp-stats-row">
@@ -667,7 +659,6 @@
               </div>
             </div>
 
-            <!-- Divider -->
             <div class="xfp-divider"></div>
 
             <!-- Button Position -->
@@ -687,6 +678,14 @@
               <label class="xfp-checkbox-row">
                 <input type="checkbox" class="xfp-hide-btn-cb">
                 <span>Hide floating button</span>
+              </label>
+            </div>
+
+            <!-- Debug Mode -->
+            <div class="xfp-setting-row">
+              <label class="xfp-checkbox-row">
+                <input type="checkbox" class="xfp-debug-mode-cb">
+                <span>Debug mode (console logs)</span>
               </label>
             </div>
 
@@ -749,68 +748,54 @@
       chrome.storage.local.set({ floatingHiddenExpanded: hiddenContent.classList.contains('show') });
     });
 
-    // Prompt controls (now inside settings section, not separate collapsible)
-    const promptInputMain = panel.querySelector('.xfp-prompt-input-main');
-    const promptSave = panel.querySelector('.xfp-prompt-save');
-    const promptCancel = panel.querySelector('.xfp-prompt-cancel');
-    const promptReset = panel.querySelector('.xfp-prompt-reset');
-    const promptStatus = panel.querySelector('.xfp-prompt-status');
+    // Custom Prompt textarea (auto-saves on blur)
+    const promptInput = panel.querySelector('.xfp-prompt-input');
+    if (promptInput) {
+      // Load current prompt
+      promptInput.value = VibeFilter.customPrompt || '';
 
-    // Store original prompt when dropdown opens - show default if no custom set
-    let originalPrompt = VibeFilter.customPrompt || VibeFilter.defaultPrompt || '';
-    promptInputMain.value = originalPrompt;
-
-    // Helper to update status text
-    function updatePromptStatus(text, isError = false) {
-      if (promptStatus) {
-        promptStatus.textContent = text;
-        promptStatus.classList.toggle('error', isError);
-        if (text) {
-          setTimeout(() => { promptStatus.textContent = ''; }, 3000);
+      // Auto-save on blur
+      promptInput.addEventListener('blur', async () => {
+        const newPrompt = promptInput.value.trim();
+        const valueToSave = newPrompt === '' ? null : newPrompt;
+        if (valueToSave !== VibeFilter.customPrompt) {
+          VibeFilter.customPrompt = valueToSave;
+          await VibeFilter.saveCustomPrompt(valueToSave);
+          showToast(valueToSave ? 'Custom prompt saved!' : 'Using default prompt', 'info', 2000);
         }
-      }
+      });
     }
 
-    // Save prompt button
-    promptSave.addEventListener('click', async () => {
-      const newPrompt = promptInputMain.value.trim();
-      const valueToSave = newPrompt === '' ? null : newPrompt;
-      VibeFilter.customPrompt = valueToSave;
-      await VibeFilter.saveCustomPrompt(valueToSave);
-      originalPrompt = newPrompt; // Update original after save
-      showToast('Custom prompt saved!', 'info', 2000);
-    });
+    // API Key toggle button
+    const apiToggleBtn = panel.querySelector('.xfp-api-toggle-btn');
+    const apiInput = panel.querySelector('.xfp-api-key-section .xfp-api-input');
+    const apiStatus = panel.querySelector('.xfp-api-status');
 
-    // Cancel button - revert to original
-    promptCancel.addEventListener('click', () => {
-      promptInputMain.value = originalPrompt;
-      updatePromptStatus('Changes discarded');
-    });
+    if (apiToggleBtn && apiInput) {
+      // Load current key (masked)
+      apiInput.value = VibeFilter.groqApiKey || '';
 
-    // More options menu toggle
-    const promptMoreBtn = panel.querySelector('.xfp-prompt-more-btn');
-    const promptMenu = panel.querySelector('.xfp-prompt-menu');
+      apiToggleBtn.addEventListener('click', () => {
+        if (apiInput.type === 'password') {
+          apiInput.type = 'text';
+          apiToggleBtn.textContent = 'Hide';
+        } else {
+          apiInput.type = 'password';
+          apiToggleBtn.textContent = 'Show';
+        }
+      });
 
-    promptMoreBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      promptMenu.classList.toggle('show');
-    });
-
-    // Close menu when clicking elsewhere
-    document.addEventListener('click', () => {
-      promptMenu.classList.remove('show');
-    });
-
-    // Reset prompt button - revert to default
-    promptReset.addEventListener('click', async () => {
-      const defaultPrompt = VibeFilter.defaultPrompt || '';
-      promptInputMain.value = defaultPrompt;
-      VibeFilter.customPrompt = null;
-      await VibeFilter.saveCustomPrompt(null);
-      originalPrompt = defaultPrompt;
-      promptMenu.classList.remove('show');
-      showToast('Prompt reset to default', 'info', 2000);
-    });
+      // Save API key on change
+      apiInput.addEventListener('change', async () => {
+        const newKey = apiInput.value.trim();
+        VibeFilter.groqApiKey = newKey;
+        await VibeFilter.saveGroqApiKey(newKey);
+        initAIScorer();
+        if (apiStatus) {
+          apiStatus.textContent = newKey ? 'Custom API key saved' : 'Using default API key - Groq active';
+        }
+      });
+    }
 
     // Settings section toggle
     const settingsToggle = panel.querySelector('.xfp-settings-toggle');
@@ -827,27 +812,6 @@
       settingsToggle.classList.toggle('expanded');
       settingsContent.classList.toggle('show');
       chrome.storage.local.set({ floatingSettingsExpanded: settingsContent.classList.contains('show') });
-    });
-
-    // Gear button (API Key) toggle
-    const gearBtn = panel.querySelector('.xfp-gear-btn');
-    const apiKeyContainer = panel.querySelector('.xfp-api-key-container');
-    const apiInput = panel.querySelector('.xfp-api-input');
-
-    gearBtn.addEventListener('click', () => {
-      apiKeyContainer.classList.toggle('show');
-      // Load current key when showing
-      if (apiKeyContainer.classList.contains('show')) {
-        apiInput.value = VibeFilter.groqApiKey || '';
-      }
-    });
-
-    // API Key input handling
-    apiInput.addEventListener('change', async () => {
-      const newKey = apiInput.value.trim();
-      VibeFilter.groqApiKey = newKey;
-      await VibeFilter.saveGroqApiKey(newKey);
-      initAIScorer();
     });
 
     // Filter Active checkbox
