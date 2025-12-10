@@ -495,6 +495,17 @@
       sendResponse({ usage: VibeFilter.groqUsage });
     } else if (message.type === 'GET_DEFAULT_PROMPT') {
       sendResponse({ defaultPrompt: VibeFilter.defaultPrompt });
+    } else if (message.type === 'UPDATE_LOAD_MORE_VISIBILITY') {
+      const container = document.querySelector('.xfp-load-more-container');
+      if (container) {
+        if (message.visible) {
+          container.classList.remove('hidden');
+        } else {
+          container.classList.add('hidden');
+        }
+        VibeFilter.settings.hideLoadMoreButton = !message.visible;
+      }
+      sendResponse({ success: true });
     }
     return true;
   });
@@ -1062,6 +1073,92 @@
     div.textContent = text || '';
     return div.innerHTML;
   }
+
+  // Create "Load More" button at bottom of feed
+  async function createLoadMoreButton() {
+    // Remove existing if any
+    document.querySelector('.xfp-load-more-container')?.remove();
+
+    const container = document.createElement('div');
+    container.className = 'xfp-load-more-container';
+
+    // Check if button should be hidden (from storage)
+    const result = await chrome.storage.sync.get('xfp_load_more_enabled');
+    const isEnabled = result.xfp_load_more_enabled !== false; // Default ON
+    if (!isEnabled) {
+      container.classList.add('hidden');
+    }
+
+    container.innerHTML = `
+      <button class="xfp-load-more-btn">
+        <span class="icon">🌴</span>
+        <span class="text">Load More</span>
+      </button>
+    `;
+
+    const btn = container.querySelector('.xfp-load-more-btn');
+    btn.addEventListener('click', async () => {
+      if (btn.classList.contains('loading')) return;
+
+      btn.classList.add('loading');
+      btn.querySelector('.text').textContent = 'Loading...';
+      btn.querySelector('.icon').innerHTML = '<div class="xfp-load-more-spinner"></div>';
+
+      // Scroll down to trigger Twitter's infinite scroll
+      const scrollAmount = window.innerHeight * 2;
+      window.scrollBy({ top: scrollAmount, behavior: 'smooth' });
+
+      // Wait for new content to load
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Reset button state
+      btn.classList.remove('loading');
+      btn.querySelector('.text').textContent = 'Load More';
+      btn.querySelector('.icon').innerHTML = '🌴';
+
+      // Re-position the button at the new bottom
+      positionLoadMoreButton();
+    });
+
+    return container;
+  }
+
+  // Position the Load More button at the bottom of the timeline
+  function positionLoadMoreButton() {
+    const container = document.querySelector('.xfp-load-more-container');
+    if (!container) return;
+
+    // Find the timeline container
+    const timeline = document.querySelector('[data-testid="primaryColumn"] section[role="region"]');
+    if (!timeline) return;
+
+    // Move to end of timeline if not already there
+    const lastChild = timeline.lastElementChild;
+    if (lastChild !== container) {
+      timeline.appendChild(container);
+    }
+  }
+
+  // Initialize Load More button
+  let loadMoreContainer = null;
+  (async () => {
+    loadMoreContainer = await createLoadMoreButton();
+
+    // Observe for timeline to appear and position button
+    const timelineObserver = new MutationObserver(() => {
+      const timeline = document.querySelector('[data-testid="primaryColumn"] section[role="region"]');
+      if (timeline && loadMoreContainer && !timeline.querySelector('.xfp-load-more-container')) {
+        timeline.appendChild(loadMoreContainer);
+      }
+    });
+    timelineObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Also try to add immediately
+    const timeline = document.querySelector('[data-testid="primaryColumn"] section[role="region"]');
+    if (timeline && loadMoreContainer) {
+      timeline.appendChild(loadMoreContainer);
+    }
+  })();
 
   // Create the floating panel
   const floatingPanel = createFloatingPanel();

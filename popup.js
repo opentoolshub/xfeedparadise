@@ -128,6 +128,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
+  // Load More button toggle
+  const loadMoreToggle = document.getElementById('loadMoreEnabled');
+
+  // Load Load More setting
+  chrome.storage.sync.get(['xfp_load_more_enabled'], (result) => {
+    // Load More defaults to ON
+    loadMoreToggle.checked = result.xfp_load_more_enabled !== false;
+  });
+
+  // Save Load More setting
+  loadMoreToggle.addEventListener('change', async (e) => {
+    await chrome.storage.sync.set({ xfp_load_more_enabled: e.target.checked });
+    sendToContentScript({ type: 'UPDATE_LOAD_MORE_VISIBILITY', visible: e.target.checked });
+  });
+
   // Sync toggle
   const syncToggle = document.getElementById('syncEnabled');
 
