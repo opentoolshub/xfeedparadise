@@ -687,6 +687,41 @@
       height: 16px;
       fill: currentColor;
     }
+
+    .gear-btn-prominent {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .gear-btn-prominent:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(139, 92, 246, 0.4);
+      color: #c4b5fd;
+    }
+
+    .gear-btn-prominent.expanded {
+      background: rgba(139, 92, 246, 0.15);
+      border-color: rgba(139, 92, 246, 0.4);
+      color: #c4b5fd;
+    }
+
+    .gear-btn-prominent svg {
+      fill: currentColor;
+      transition: transform 0.3s;
+    }
+
+    .gear-btn-prominent.expanded svg {
+      transform: rotate(90deg);
+    }
   </style>
 </head>
 <body>
@@ -760,12 +795,7 @@
 
       <!-- AI Section -->
       <div class="section" style="margin-bottom: 12px; margin-top: 12px;">
-        <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
-          <span>AI Scoring</span>
-          <button class="gear-btn" id="advancedToggle" title="AI Settings">
-            <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-          </button>
-        </div>
+        <div class="section-title">AI Scoring</div>
         <div class="ai-status" id="aiStatus">
           <span class="ai-indicator loading"></span>
           <span>Checking...</span>
@@ -774,26 +804,40 @@
           <input type="checkbox" id="useAI" checked>
           <span>Use AI-powered scoring</span>
         </label>
-        
-        <!-- Advanced AI Settings (hidden by default) -->
-        <div class="advanced-content" id="advancedContent">
-          <div class="api-key-container" style="margin-top: 8px;">
-            <div class="api-key-label">
-              <span>Groq API Key (free)</span>
-              <a href="https://console.groq.com/keys" target="_blank">Get key</a>
-            </div>
-            <div class="api-key-input-row">
-              <input type="password" id="groqApiKey" class="api-key-input" placeholder="gsk_...">
-              <button id="toggleApiKey" class="api-key-toggle">Show</button>
-            </div>
-            <div id="apiKeyStatus" class="api-key-status">Using default API key</div>
-            
-            <div class="api-key-label" style="margin-top: 10px;">
-              <span>Custom Prompt (Optional)</span>
-            </div>
-            <textarea id="customPrompt" class="api-key-input" style="height: 60px; resize: vertical; font-family: monospace;" placeholder="Default: Rate the sentiment/vibe..."></textarea>
-            <div class="hint" style="margin-top: 4px; color: #64748b;">Leave empty to use default. Must ask for a number -100 to 100.</div>
+
+        <!-- API Key (always visible) -->
+        <div class="api-key-container" style="margin-top: 8px;">
+          <div class="api-key-label">
+            <span>Groq API Key (free)</span>
+            <a href="https://console.groq.com/keys" target="_blank">Get key</a>
           </div>
+          <div class="api-key-input-row">
+            <input type="password" id="groqApiKey" class="api-key-input" placeholder="gsk_...">
+            <button id="toggleApiKey" class="api-key-toggle">Show</button>
+          </div>
+          <div id="apiKeyStatus" class="api-key-status">Using default API key - Groq active</div>
+        </div>
+
+        <!-- Custom Prompt (always visible, prominent) -->
+        <div class="custom-prompt-section" style="margin-top: 12px;">
+          <div class="api-key-label">
+            <span>Custom Prompt (Optional)</span>
+          </div>
+          <textarea id="customPrompt" class="api-key-input" style="height: 80px; resize: vertical; font-family: inherit; font-size: 12px; line-height: 1.4;" placeholder="Rate the sentiment/vibe of this tweet from -100 (very negative, toxic, outrage-bait) to +100 (very positive, uplifting, enlightening).
+
+Consider: Is it constructive? Informative? Does it spark joy or outrage?"></textarea>
+          <div class="hint" style="margin-top: 4px; color: #64748b;">Leave empty to use default. Must ask for a number -100 to 100.</div>
+        </div>
+
+        <!-- Advanced Settings (behind gear) -->
+        <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px;">
+          <button class="gear-btn-prominent" id="advancedToggle" title="API Usage Stats">
+            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+            <span>API Usage</span>
+          </button>
+        </div>
+
+        <div class="advanced-content" id="advancedContent">
           <div class="usage-stats" id="usageStats">
             <div class="usage-label">API Usage</div>
             <div class="usage-row">
