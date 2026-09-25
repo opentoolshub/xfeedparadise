@@ -4,7 +4,7 @@ A Chrome extension that transforms your X/Twitter feed into a paradise of uplift
 
 ## Features
 
-### Version 1.3.1
+### Version 1.3.2
 - **Vibe-based filtering**: Automatically scores tweets based on whether they're uplifting vs. outrage-inducing
 - **Multiple filter modes**:
   - **Hide**: Completely hides low-vibe tweets
@@ -14,6 +14,8 @@ A Chrome extension that transforms your X/Twitter feed into a paradise of uplift
 - **Debug mode**: Optionally show vibe scores on tweets
 - **Local database**: Stores all tweets you see in IndexedDB for future features
 - **AI scoring**: Uses Groq GPT-OSS 20B when you add a Groq API key; falls back to keyword scoring if the API is unavailable
+- **Connection status**: The popup can test the Groq key/model and reports scoring failures; a warning appears on the page when AI falls back to keywords
+- **No community upload**: Viewed posts and articles stay in the browser's local database; AI scoring sends only scoring text to Groq when enabled
 
 The current extension does not call Cloudflare Workers AI.
 
@@ -55,6 +57,7 @@ The algorithm scores tweets from -100 (pure outrage) to +100 (enlightening) base
 3. **Configure Groq AI scoring**
    - Get a key from [GroqCloud](https://console.groq.com/keys), then open the extension popup and paste it into **Groq API Key · GPT-OSS 20B**.
    - The key is saved in Chrome sync storage. The extension does not bundle an API key.
+   - Use **Test connection** in the popup to check the key and model. The popup also reports errors from actual scoring requests.
    - Without a working key, the extension uses local keyword scoring.
 
 4. **Visit X/Twitter or Google News**
@@ -93,24 +96,6 @@ All tweets are stored locally in your browser using IndexedDB:
 
 When AI scoring is enabled, tweet or news-item text is sent to Groq for scoring. Local browsing data can be cleared via the popup.
 
-## Future Roadmap
-
-### Phase 1.5: Enhanced Filtering
-- [ ] Custom word lists (add your own positive/negative triggers)
-- [ ] Per-user vibe settings (always show/hide specific accounts)
-- [ ] Time-based filtering (more lenient during certain hours)
-
-### Phase 2: Shared Database
-- [ ] Optional sync to shared database
-- [ ] Browse high-vibe tweets from all users
-- [ ] Custom feed algorithm based on aggregated data
-- [ ] "Paradise Mode" - completely replace feed with curated content
-
-### Phase 3: AI Enhancement
-- [ ] LLM-based content analysis for better scoring
-- [ ] Personalized vibe models
-- [ ] Topic-based filtering
-
 ## Development
 
 ### Project Structure
@@ -138,7 +123,6 @@ PRs welcome! Some ideas:
 - Improve the scoring algorithm
 - Add support for different languages
 - Create better pattern detection
-- Build the shared database backend
 
 ## License
 

@@ -143,20 +143,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     sendToContentScript({ type: 'UPDATE_LOAD_MORE_VISIBILITY', visible: e.target.checked });
   });
 
-  // Sync toggle
-  const syncToggle = document.getElementById('syncEnabled');
-
-  // Load sync setting
-  chrome.storage.sync.get(['xfp_sync_enabled'], (result) => {
-    // Sync defaults to ON
-    syncToggle.checked = result.xfp_sync_enabled !== false;
-  });
-
-  // Save sync setting
-  syncToggle.addEventListener('change', async (e) => {
-    await chrome.storage.sync.set({ xfp_sync_enabled: e.target.checked });
-  });
-
   document.getElementById('useAI').addEventListener('change', async (e) => {
     await saveSettings({ useAI: e.target.checked });
     sendToContentScript({ type: 'UPDATE_SETTINGS', settings: { useAI: e.target.checked } });
@@ -167,16 +153,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Groq API Key handling
   const apiKeyInput = document.getElementById('groqApiKey');
   const toggleApiKeyBtn = document.getElementById('toggleApiKey');
-  const apiKeyStatus = document.getElementById('apiKeyStatus');
+  const testGroqBtn = document.getElementById('testGroqConnection');
   const customPromptInput = document.getElementById('customPrompt');
 
   // Load saved API key and Custom Prompt
-  chrome.storage.sync.get(['groqApiKey', 'customPrompt'], (result) => {
+  chrome.storage.sync.get(['groqApiKey', 'customPrompt'], async (result) => {
     if (result.groqApiKey) {
       apiKeyInput.value = result.groqApiKey;
-      updateApiKeyStatus(result.groqApiKey);
-    } else {
-      updateApiKeyStatus(null);
+    }
+    updateAIStatus();
+    if (result.groqApiKey?.startsWith('gsk_')) {
+      const { xfpGroqStatus } = await chrome.storage.local.get('xfpGroqStatus');
+      if (!xfpGroqStatus || Date.now() - xfpGroqStatus.checkedAt > 15 * 60 * 1000) {
+        testGroqConnection(result.groqApiKey);
+      }
     }
     
     // Load custom prompt or use default placeholder logic
@@ -217,12 +207,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Save API key on change
   apiKeyInput.addEventListener('change', async () => {
     const apiKey = apiKeyInput.value.trim();
+    await chrome.storage.local.remove('xfpGroqStatus');
     await chrome.storage.sync.set({ groqApiKey: apiKey });
-    updateApiKeyStatus(apiKey);
     updateAIStatus();
     // Notify content script of new API key
     sendToContentScript({ type: 'UPDATE_GROQ_API_KEY', apiKey });
     showRefreshNotice();
+    if (apiKey.startsWith('gsk_')) testGroqConnection(apiKey);
+  });
+
+  testGroqBtn.addEventListener('click', () => testGroqConnection(apiKeyInput.value.trim()));
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.xfpGroqStatus) updateAIStatus();
   });
 
   // Save Custom Prompt on change
@@ -283,16 +279,55 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function updateApiKeyStatus(apiKey) {
-    if (apiKey && apiKey.startsWith('gsk_')) {
-      apiKeyStatus.textContent = 'Groq key saved for GPT-OSS 20B';
-      apiKeyStatus.className = 'api-key-status connected';
-    } else if (apiKey) {
-      apiKeyStatus.textContent = 'Invalid key format (should start with gsk_)';
-      apiKeyStatus.className = 'api-key-status error';
-    } else {
-      apiKeyStatus.textContent = 'Add a Groq key to enable AI scoring';
-      apiKeyStatus.className = 'api-key-status';
+  async function testGroqConnection(apiKey) {
+    if (!apiKey.startsWith('gsk_')) {
+      updateAIStatus();
+      return;
+    }
+
+    testGroqBtn.disabled = true;
+    testGroqBtn.textContent = 'Checking…';
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    let state = 'network_error';
+    let httpStatus = null;
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal
+      });
+      httpStatus = response.status;
+      if (response.ok) {
+        const models = await response.json();
+        state = Array.isArray(models.data) && models.data.some(model => model.id === 'openai/gpt-oss-20b')
+          ? 'available' : 'model_error';
+      } else if (response.status === 401 || response.status === 403) {
+        state = 'auth_error';
+      } else if (response.status === 429) {
+        state = 'rate_limited';
+      } else {
+        state = 'api_error';
+      }
+    } catch (error) {
+      state = 'network_error';
+    } finally {
+      clearTimeout(timeout);
+      testGroqBtn.disabled = false;
+      testGroqBtn.textContent = 'Test connection';
+    }
+
+    const saved = await chrome.storage.sync.get('groqApiKey');
+    if (saved.groqApiKey === apiKey) {
+      const { xfpGroqStatus } = await chrome.storage.local.get('xfpGroqStatus');
+      // An actual scoring request may have finished while this probe was in flight.
+      if (!xfpGroqStatus || xfpGroqStatus.checkedAt <= startedAt) {
+        await chrome.storage.local.set({
+          xfpGroqStatus: { state, httpStatus, checkedAt: Date.now() }
+        });
+      }
+      updateAIStatus();
     }
   }
 
@@ -437,20 +472,72 @@ async function updateAIStatus() {
   const statusEl = document.getElementById('aiStatus');
   const indicator = statusEl.querySelector('.ai-indicator');
   const text = statusEl.querySelector('span:last-child');
+  const keyStatus = document.getElementById('apiKeyStatus');
+  const [keyResult, statusResult] = await Promise.all([
+    chrome.storage.sync.get('groqApiKey'),
+    chrome.storage.local.get('xfpGroqStatus')
+  ]);
+  const apiKey = keyResult.groqApiKey;
+  const savedStatus = statusResult.xfpGroqStatus;
+  const status = savedStatus && Date.now() - savedStatus.checkedAt <= 15 * 60 * 1000
+    ? savedStatus : null;
+
+  let label = 'Add a Groq key to enable AI scoring';
+  let state = 'disabled';
+  if (apiKey && !apiKey.startsWith('gsk_')) {
+    label = 'Invalid Groq key format (expected gsk_)';
+    state = 'error';
+  } else if (apiKey) {
+    switch (status?.state) {
+      case 'working':
+        label = 'Groq AI scoring is working';
+        state = 'ready';
+        break;
+      case 'available':
+        label = 'Groq key and model reachable; scoring not yet verified';
+        state = 'loading';
+        break;
+      case 'auth_error':
+        label = 'Groq rejected this key — check or replace it';
+        state = 'error';
+        break;
+      case 'rate_limited':
+        label = 'Groq rate limit reached — using keyword scoring';
+        state = 'error';
+        break;
+      case 'model_error':
+        label = 'GPT-OSS 20B is unavailable for this key';
+        state = 'error';
+        break;
+      case 'network_error':
+        label = 'Cannot reach Groq — using keyword scoring';
+        state = 'error';
+        break;
+      case 'invalid_response':
+        label = 'Groq returned an unusable score — using keywords';
+        state = 'error';
+        break;
+      case 'api_error':
+        label = `Groq API error${status.httpStatus ? ` (${status.httpStatus})` : ''} — using keywords`;
+        state = 'error';
+        break;
+      default:
+        label = 'Groq key saved; connection not yet verified';
+        state = 'loading';
+    }
+  }
+
+  keyStatus.textContent = label;
+  keyStatus.className = `api-key-status ${state === 'ready' ? 'connected' : state === 'error' ? 'error' : ''}`;
+  const warning = document.getElementById('connectionWarning');
+  warning.textContent = state === 'error' ? `${label}. Local keyword filtering remains available.` : '';
+  warning.classList.toggle('show', settings.useAI && state === 'error');
 
   if (!settings.useAI) {
     indicator.className = 'ai-indicator disabled';
     text.textContent = 'AI scoring disabled';
     return;
   }
-
-  chrome.storage.sync.get('groqApiKey', (result) => {
-    if (result.groqApiKey && result.groqApiKey.startsWith('gsk_')) {
-      indicator.className = 'ai-indicator ready';
-      text.textContent = 'Groq GPT-OSS 20B configured';
-    } else {
-      indicator.className = 'ai-indicator disabled';
-      text.textContent = 'Keywords only — add Groq key';
-    }
-  });
+  indicator.className = `ai-indicator ${state}`;
+  text.textContent = apiKey ? label : 'Keywords only — add Groq key';
 }

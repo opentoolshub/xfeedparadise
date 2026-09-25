@@ -14,27 +14,19 @@ echo -e "${BLUE}Building XFeed Paradise for Chrome Web Store...${NC}"
 
 # Get version from manifest
 VERSION=$(grep '"version"' manifest.json | sed 's/.*: "\(.*\)".*/\1/')
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Invalid manifest version: $VERSION" >&2
+  exit 1
+fi
 OUTPUT="xfeed-paradise-v${VERSION}.zip"
 
 # Remove old build if exists
 rm -f "$OUTPUT"
 
-# Create zip excluding dev files
-zip -r "$OUTPUT" . \
-  -x "*.git*" \
-  -x "node_modules/*" \
-  -x "*.map" \
-  -x "docs/*" \
-  -x "store_assets/*" \
-  -x "*.sh" \
-  -x "*.md" \
-  -x ".DS_Store" \
-  -x "src/*" \
-  -x "build.js" \
-  -x "package*.json" \
-  -x ".claude/*" \
-  -x "PROMPTS.md" \
-  -x "CLAUDE.md"
+# Package only files required by manifest.json; never bundle old ZIPs or plans.
+zip -r "$OUTPUT" manifest.json popup.html popup.js background.js \
+  content.js content-googlenews.js filter.js db.js styles.css \
+  icons/icon16.png icons/icon48.png icons/icon128.png
 
 # Show result
 echo -e "${GREEN}Build complete!${NC}"

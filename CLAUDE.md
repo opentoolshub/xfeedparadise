@@ -1,13 +1,5 @@
 # XFeedParadise Project Instructions
 
-## Prompt Logging
+## Private planning
 
-Save every user prompt to `PROMPTS.md` in the project root. Append each new prompt at the TOP of the file (after the header) with a timestamp. Format:
-
-```markdown
-## YYYY-MM-DD HH:MM - Brief Description
-
-[exact user prompt text]
-
----
-```
+Do not commit user prompt logs, release plans, cost estimates, or internal research to this public repository. The private sibling repository `XFeedParadise-internal` is their canonical versioned home. Public documentation should describe shipped behavior and accurate privacy practices.

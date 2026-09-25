@@ -5,3 +5,5 @@ node_modules/
 tasks/
 docs/CLOUDFLARE_WORKERS_AI_USAGE.md
 docs/MOBILE_SERVER_PLAN.md
+xfeed-paradise-v*.zip
+PROMPTS.md

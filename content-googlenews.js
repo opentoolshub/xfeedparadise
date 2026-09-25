@@ -39,7 +39,7 @@
     console.log('🌴 XFeed Paradise: Checking Groq API status...');
     await checkGroqStatus();
     if (groqApiReady) {
-      console.log('🌴 XFeed Paradise: Groq API ready for AI scoring');
+      console.log('🌴 XFeed Paradise: Groq key configured; connection not yet verified');
     } else {
       console.log('🌴 XFeed Paradise: No Groq API key - using keyword scoring');
     }
@@ -97,6 +97,18 @@
       lastRateLimitToast = now;
       showToast(`${apiName} rate limited. Using keyword scoring for ${waitSeconds}s`, 'warning', 5000);
     }
+  };
+
+  let lastApiErrorToast = 0;
+  VibeFilter.onApiError = (apiName, reason) => {
+    const now = Date.now();
+    if (now - lastApiErrorToast < 30000) return;
+    lastApiErrorToast = now;
+    const problem = reason === 401 || reason === 403 ? 'key rejected'
+      : reason === 'network_error' ? 'connection failed'
+      : reason === 'invalid_response' ? 'unexpected response'
+      : `error ${reason}`;
+    showToast(`${apiName} ${problem}. Using keyword scoring; check the extension popup.`, 'warning', 6000);
   };
 
   // IntersectionObserver for viewport detection
@@ -374,20 +386,13 @@
       (aiScore, aiSource) => {
         if (articleElement && articleElement.isConnected) {
           article.vibeScore = aiScore;
-          article.scoredWithAI = true;
+          article.scoredWithAI = aiSource === 'ai';
           applyFilter(articleElement, article, aiScore);
           updateFloatingPanel();
 
           // Update in database
-          const articleWithAI = { ...article, vibeScore: aiScore, scoredWithAI: true };
+          const articleWithAI = { ...article, vibeScore: aiScore, scoredWithAI: aiSource === 'ai' };
           window.tweetDB.saveTweet(articleWithAI).catch(() => {});
-
-          // Queue for backend sync (AI-scored version preferred)
-          window.tweetDB.queueForSync({
-            ...articleWithAI,
-            authorHandle: article.authorId, // Source/publication name
-            wasHidden: !VibeFilter.shouldShow(aiScore)
-          });
         }
       }
     );
@@ -533,6 +538,7 @@
     } else if (message.type === 'UPDATE_GROQ_API_KEY') {
       VibeFilter.apis.groq.userKey = message.apiKey || null;
       VibeFilter.apis.groq.disabled = false;
+      VibeFilter.apis.groq.rateLimited = false;
       checkGroqStatus();
       updateFloatingPanel();
       sendResponse({ success: true });

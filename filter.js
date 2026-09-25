@@ -19,6 +19,13 @@ const VibeFilter = {
 
   // Callback for rate limit notifications (set by content.js)
   onRateLimit: null,
+  onApiError: null,
+
+  reportGroqStatus(state, httpStatus = null) {
+    chrome.storage.local.set({
+      xfpGroqStatus: { state, httpStatus, checkedAt: Date.now() }
+    });
+  },
 
   // API Configuration
   apis: {
@@ -236,21 +243,29 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
       : this.getBatchPrompt(texts);
 
     try {
-      const response = await fetch(api.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: api.model,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0,
-          ...(apiName === 'groq'
-            ? { max_completion_tokens: 256, reasoning_effort: 'low', include_reasoning: false }
-            : { max_tokens: 200 })
-        })
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      let response;
+      try {
+        response = await fetch(api.baseUrl, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: api.model,
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0,
+            ...(apiName === 'groq'
+              ? { max_completion_tokens: 256, reasoning_effort: 'low', include_reasoning: false }
+              : { max_tokens: 200 })
+          })
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       // Update usage from headers (Groq-style)
       const remaining = response.headers.get('x-ratelimit-remaining-requests');
@@ -271,6 +286,7 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
 
         api.rateLimited = true;
         api.rateLimitReset = Date.now() + waitTime;
+        if (apiName === 'groq') this.reportGroqStatus('rate_limited', 429);
 
         // Notify UI
         if (this.onRateLimit) {
@@ -283,6 +299,10 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
       if (!response.ok) {
         console.warn(`🌴 XFP: ${api.name} error ${response.status}`);
         api.disabled = true;
+        if (apiName === 'groq') {
+          this.reportGroqStatus(response.status === 401 || response.status === 403 ? 'auth_error' : 'api_error', response.status);
+        }
+        if (this.onApiError) this.onApiError(api.name, response.status);
         return null;
       }
 
@@ -291,10 +311,16 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
 
       this.debug(`${api.name} response: ${content}`);
 
-      return this.parseScoresFromResponse(content, texts.length);
+      const scores = this.parseScoresFromResponse(content, texts.length);
+      if (apiName === 'groq') this.reportGroqStatus(scores ? 'working' : 'invalid_response');
+      if (!scores && this.onApiError) this.onApiError(api.name, 'invalid_response');
+      api.rateLimited = false;
+      return scores;
     } catch (error) {
       console.error(`🌴 XFP: ${api.name} error:`, error);
       api.disabled = true;
+      if (apiName === 'groq') this.reportGroqStatus('network_error');
+      if (this.onApiError) this.onApiError(api.name, 'network_error');
       return null;
     }
   },
@@ -366,6 +392,8 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
   async saveGroqApiKey(key) {
     this.apis.groq.userKey = key || null;
     this.apis.groq.disabled = false;
+    this.apis.groq.rateLimited = false;
+    await chrome.storage.local.remove('xfpGroqStatus');
     return new Promise((resolve) => {
       chrome.storage.sync.set({ groqApiKey: key }, resolve);
     });

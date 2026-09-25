@@ -37,7 +37,7 @@
     console.log('🌴 XFeed Paradise: Checking Groq API status...');
     await checkGroqStatus();
     if (groqApiReady) {
-      console.log('🌴 XFeed Paradise: Groq API ready for AI scoring');
+      console.log('🌴 XFeed Paradise: Groq key configured; connection not yet verified');
     } else {
       console.log('🌴 XFeed Paradise: No Groq API key - using keyword scoring');
     }
@@ -99,6 +99,18 @@
       lastRateLimitToast = now;
       showToast(`${apiName} rate limited. Using keyword scoring for ${waitSeconds}s`, 'warning', 5000);
     }
+  };
+
+  let lastApiErrorToast = 0;
+  VibeFilter.onApiError = (apiName, reason) => {
+    const now = Date.now();
+    if (now - lastApiErrorToast < 30000) return;
+    lastApiErrorToast = now;
+    const problem = reason === 401 || reason === 403 ? 'key rejected'
+      : reason === 'network_error' ? 'connection failed'
+      : reason === 'invalid_response' ? 'unexpected response'
+      : `error ${reason}`;
+    showToast(`${apiName} ${problem}. Using keyword scoring; check the extension popup.`, 'warning', 6000);
   };
 
   // IntersectionObserver for viewport detection - catches fast scrolling & recycled elements
@@ -352,23 +364,13 @@
       (aiScore, aiSource) => {
         if (article && article.isConnected) {
           tweet.vibeScore = aiScore;
-          tweet.scoredWithAI = true;
+          tweet.scoredWithAI = aiSource === 'ai';
           applyFilter(article, tweet, aiScore);
           updateFloatingPanel();
 
           // Update in database
-          const tweetWithAI = { ...tweet, vibeScore: aiScore, scoredWithAI: true };
+          const tweetWithAI = { ...tweet, vibeScore: aiScore, scoredWithAI: aiSource === 'ai' };
           window.tweetDB.saveTweet(tweetWithAI).catch(() => {});
-
-          // Queue for backend sync (AI-scored version preferred)
-          window.tweetDB.queueForSync({
-            ...tweetWithAI,
-            authorHandle: tweet.authorId,
-            wasHidden: !VibeFilter.shouldShow(aiScore),
-            likes: tweet.metrics?.likes,
-            retweets: tweet.metrics?.retweets,
-            replies: tweet.metrics?.replies
-          });
         }
       }
     );
@@ -484,6 +486,7 @@
       // Update Groq API key
       VibeFilter.apis.groq.userKey = message.apiKey || null;
       VibeFilter.apis.groq.disabled = false;
+      VibeFilter.apis.groq.rateLimited = false;
       checkGroqStatus();
       updateFloatingPanel();
       console.log('🌴 XFeed Paradise: Groq API key updated');
