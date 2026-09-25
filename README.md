@@ -15,7 +15,7 @@ A Chrome extension that transforms your X/Twitter feed into a paradise of uplift
 - **Local database**: Stores all tweets you see in IndexedDB for future features
 - **AI scoring**: Uses Groq GPT-OSS 20B when you add a Groq API key; falls back to keyword scoring if the API is unavailable
 
-For a hypothetical Cloudflare Workers AI fallback, see the [usage estimate](docs/CLOUDFLARE_WORKERS_AI_USAGE.md). The current extension does not call Cloudflare Workers AI.
+The current extension does not call Cloudflare Workers AI.
 
 ### Scoring System
 The algorithm scores tweets from -100 (pure outrage) to +100 (enlightening) based on:

@@ -2,3 +2,6 @@
 *.log
 node_modules/
 *.map
+tasks/
+docs/CLOUDFLARE_WORKERS_AI_USAGE.md
+docs/MOBILE_SERVER_PLAN.md
