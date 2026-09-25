@@ -27,12 +27,12 @@ XFeed Paradise uses AI sentiment analysis to score every tweet and news article 
 Social media algorithms optimize for engagement, not your wellbeing. Outrage and conflict drive clicks, but they also drive anxiety and polarization. XFeed Paradise flips the script - now YOUR feed optimizes for content that leaves you feeling better, not worse.
 
 **Free to Use:**
-- Works out of the box with our shared Groq API key
-- Or bring your own free Groq API key for unlimited usage
+- Works with local keyword scoring without an API key
+- Add your own Groq API key for GPT-OSS 20B scoring, subject to Groq's current rate limits
 
 **Open Source:**
 XFeed Paradise is fully open source. Review the code, suggest features, or contribute at:
-https://github.com/tmad4000/XFeedParadise
+https://github.com/opentoolshub/xfeedparadise
 
 ## Category
 Productivity
@@ -45,7 +45,7 @@ English
 2. screenshot-settings.png - Settings panel with AI scoring options
 
 ## Privacy Policy URL
-https://github.com/tmad4000/XFeedParadise/blob/main/PRIVACY.md
+https://github.com/opentoolshub/xfeedparadise/blob/main/PRIVACY.md
 
 ## Homepage URL
-https://github.com/tmad4000/XFeedParadise
+https://github.com/opentoolshub/xfeedparadise

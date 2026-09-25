@@ -531,7 +531,10 @@
       }
       sendResponse({ success: true });
     } else if (message.type === 'UPDATE_GROQ_API_KEY') {
-      VibeFilter.groqApiKey = message.apiKey || null;
+      VibeFilter.apis.groq.userKey = message.apiKey || null;
+      VibeFilter.apis.groq.disabled = false;
+      checkGroqStatus();
+      updateFloatingPanel();
       sendResponse({ success: true });
     } else if (message.type === 'UPDATE_CUSTOM_PROMPT') {
       VibeFilter.customPrompt = message.prompt || null;
@@ -836,13 +839,16 @@
 
     // Update AI status
     if (aiDot && aiText) {
-      const hasGroqKey = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
+      const activeApi = VibeFilter.getBestApi();
       if (VibeFilter.settings.useAI === false) {
         aiDot.classList.remove('ready');
         aiText.textContent = 'AI disabled';
-      } else if (hasGroqKey) {
+      } else if (activeApi === 'groq') {
         aiDot.classList.add('ready');
-        aiText.textContent = 'Groq AI active';
+        aiText.textContent = 'Groq GPT-OSS 20B configured';
+      } else if (activeApi === 'together') {
+        aiDot.classList.add('ready');
+        aiText.textContent = 'Together AI configured';
       } else {
         aiDot.classList.remove('ready');
         aiText.textContent = 'Keywords only';

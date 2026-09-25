@@ -482,7 +482,10 @@
       sendResponse({ success: true });
     } else if (message.type === 'UPDATE_GROQ_API_KEY') {
       // Update Groq API key
-      VibeFilter.groqApiKey = message.apiKey || null;
+      VibeFilter.apis.groq.userKey = message.apiKey || null;
+      VibeFilter.apis.groq.disabled = false;
+      checkGroqStatus();
+      updateFloatingPanel();
       console.log('🌴 XFeed Paradise: Groq API key updated');
       sendResponse({ success: true });
     } else if (message.type === 'UPDATE_CUSTOM_PROMPT') {
@@ -631,7 +634,7 @@
                 <input type="password" class="xfp-api-input" placeholder="gsk_...">
                 <button class="xfp-api-toggle-btn">Show</button>
               </div>
-              <div class="xfp-api-status">Using default API key - Groq active</div>
+              <div class="xfp-api-status">Add a Groq key to enable GPT-OSS scoring</div>
             </div>
 
             <!-- Custom Prompt Section (always visible) -->
@@ -788,11 +791,10 @@
       // Save API key on change
       apiInput.addEventListener('change', async () => {
         const newKey = apiInput.value.trim();
-        VibeFilter.groqApiKey = newKey;
         await VibeFilter.saveGroqApiKey(newKey);
         initAIScorer();
         if (apiStatus) {
-          apiStatus.textContent = newKey ? 'Custom API key saved' : 'Using default API key - Groq active';
+          apiStatus.textContent = newKey ? 'Groq key saved' : 'Add a Groq key to enable GPT-OSS scoring';
         }
       });
     }
@@ -935,13 +937,16 @@
 
     // Update AI status (now shows Groq status)
     if (aiDot && aiText) {
-      const hasGroqKey = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
+      const activeApi = VibeFilter.getBestApi();
       if (VibeFilter.settings.useAI === false) {
         aiDot.classList.remove('ready');
         aiText.textContent = 'AI disabled';
-      } else if (hasGroqKey) {
+      } else if (activeApi === 'groq') {
         aiDot.classList.add('ready');
-        aiText.textContent = 'Groq AI active';
+        aiText.textContent = 'Groq GPT-OSS 20B configured';
+      } else if (activeApi === 'together') {
+        aiDot.classList.add('ready');
+        aiText.textContent = 'Together AI configured';
       } else {
         aiDot.classList.remove('ready');
         aiText.textContent = 'Keywords only';

@@ -176,8 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       apiKeyInput.value = result.groqApiKey;
       updateApiKeyStatus(result.groqApiKey);
     } else {
-      // Show that default key is being used
-      updateApiKeyStatus(null, true);
+      updateApiKeyStatus(null);
     }
     
     // Load custom prompt or use default placeholder logic
@@ -220,6 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const apiKey = apiKeyInput.value.trim();
     await chrome.storage.sync.set({ groqApiKey: apiKey });
     updateApiKeyStatus(apiKey);
+    updateAIStatus();
     // Notify content script of new API key
     sendToContentScript({ type: 'UPDATE_GROQ_API_KEY', apiKey });
     showRefreshNotice();
@@ -283,18 +283,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function updateApiKeyStatus(apiKey, usingDefault = false) {
+  function updateApiKeyStatus(apiKey) {
     if (apiKey && apiKey.startsWith('gsk_')) {
-      apiKeyStatus.textContent = 'Custom API key saved - using Groq';
+      apiKeyStatus.textContent = 'Groq key saved for GPT-OSS 20B';
       apiKeyStatus.className = 'api-key-status connected';
     } else if (apiKey) {
       apiKeyStatus.textContent = 'Invalid key format (should start with gsk_)';
       apiKeyStatus.className = 'api-key-status error';
-    } else if (usingDefault) {
-      apiKeyStatus.textContent = 'Using default API key - Groq active';
-      apiKeyStatus.className = 'api-key-status connected';
     } else {
-      apiKeyStatus.textContent = 'Enter API key for faster, smarter scoring';
+      apiKeyStatus.textContent = 'Add a Groq key to enable AI scoring';
       apiKeyStatus.className = 'api-key-status';
     }
   }
@@ -447,16 +444,13 @@ async function updateAIStatus() {
     return;
   }
 
-  // Default key is always available, so Groq is always active
-  // Only show custom key status if user has entered one
   chrome.storage.sync.get('groqApiKey', (result) => {
     if (result.groqApiKey && result.groqApiKey.startsWith('gsk_')) {
       indicator.className = 'ai-indicator ready';
-      text.textContent = 'Groq AI active (custom key)';
+      text.textContent = 'Groq GPT-OSS 20B configured';
     } else {
-      // Using default key - still active
-      indicator.className = 'ai-indicator ready';
-      text.textContent = 'Groq AI active';
+      indicator.className = 'ai-indicator disabled';
+      text.textContent = 'Keywords only — add Groq key';
     }
   });
 }

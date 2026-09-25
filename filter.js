@@ -25,9 +25,10 @@ const VibeFilter = {
     groq: {
       name: 'Groq',
       baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
-      model: 'llama-3.1-8b-instant',
-      defaultKey: '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',
+      model: 'openai/gpt-oss-20b',
+      defaultKey: null,
       userKey: null,
+      disabled: false,
       rateLimited: false,
       rateLimitReset: 0,
       lastRequest: 0,
@@ -40,6 +41,7 @@ const VibeFilter = {
       model: 'meta-llama/Llama-3.2-3B-Instruct-Turbo',
       defaultKey: null, // User must provide
       userKey: null,
+      disabled: false,
       rateLimited: false,
       rateLimitReset: 0,
       lastRequest: 0,
@@ -85,7 +87,7 @@ const VibeFilter = {
     const hasKey = !!(api.userKey || api.defaultKey);
     const isRateLimited = api.rateLimited && Date.now() < api.rateLimitReset;
 
-    return hasKey && !isRateLimited;
+    return hasKey && !isRateLimited && !api.disabled;
   },
 
   // Get the best available API
@@ -156,7 +158,7 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
       if (!apiName) {
         // No API available - fall back to keywords for all queued
         this.debug('No API available, using keywords for queued tweets');
-        console.warn('🌴 XFP: All APIs rate limited. Using keyword scoring.');
+        console.warn('🌴 XFP: No AI API available. Using keyword scoring.');
 
         while (this.batchQueue.length > 0) {
           const { tweetId, text, callback } = this.batchQueue.shift();
@@ -205,12 +207,14 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
             }
           });
         } else {
-          // Scoring failed, put items back in queue to try another API
+          // Do not retry the same failing provider forever.
+          if (!api.rateLimited) api.disabled = true;
           this.debug(`${api.name} returned invalid scores, will retry with fallback`);
           this.batchQueue.unshift(...batch);
         }
       } catch (error) {
         console.error(`🌴 XFP: ${api.name} error:`, error);
+        api.disabled = true;
         this.debug(`${api.name} error: ${error.message}`);
         // Put items back to try another API
         this.batchQueue.unshift(...batch);
@@ -242,7 +246,9 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
           model: api.model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0,
-          max_tokens: 200
+          ...(apiName === 'groq'
+            ? { max_completion_tokens: 256, reasoning_effort: 'low', include_reasoning: false }
+            : { max_tokens: 200 })
         })
       });
 
@@ -276,6 +282,7 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
 
       if (!response.ok) {
         console.warn(`🌴 XFP: ${api.name} error ${response.status}`);
+        api.disabled = true;
         return null;
       }
 
@@ -287,6 +294,7 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
       return this.parseScoresFromResponse(content, texts.length);
     } catch (error) {
       console.error(`🌴 XFP: ${api.name} error:`, error);
+      api.disabled = true;
       return null;
     }
   },
@@ -341,10 +349,9 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
       chrome.storage.sync.get(['groqApiKey', 'togetherApiKey', 'customPrompt'], (result) => {
         this.apis.groq.userKey = result.groqApiKey || null;
         this.apis.together.userKey = result.togetherApiKey || null;
+        this.apis.groq.disabled = false;
+        this.apis.together.disabled = false;
         this.customPrompt = result.customPrompt || null;
-
-        // For backward compatibility
-        this.groqApiKey = this.getApiKey('groq');
 
         resolve({
           groqApiKey: this.getApiKey('groq'),
@@ -358,7 +365,7 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
   // Save Groq API key
   async saveGroqApiKey(key) {
     this.apis.groq.userKey = key || null;
-    this.groqApiKey = this.getApiKey('groq');
+    this.apis.groq.disabled = false;
     return new Promise((resolve) => {
       chrome.storage.sync.set({ groqApiKey: key }, resolve);
     });
@@ -380,12 +387,9 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
     });
   },
 
-  // Backward compatibility getter
+  // Current Groq key for content-script status displays
   get groqApiKey() {
     return this.getApiKey('groq');
-  },
-  set groqApiKey(val) {
-    // Handled by saveGroqApiKey
   },
 
   // Get usage stats for UI

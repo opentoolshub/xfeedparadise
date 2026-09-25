@@ -4,7 +4,7 @@ A Chrome extension that transforms your X/Twitter feed into a paradise of uplift
 
 ## Features
 
-### MVP (Current Version)
+### Version 1.3.1
 - **Vibe-based filtering**: Automatically scores tweets based on whether they're uplifting vs. outrage-inducing
 - **Multiple filter modes**:
   - **Hide**: Completely hides low-vibe tweets
@@ -13,6 +13,7 @@ A Chrome extension that transforms your X/Twitter feed into a paradise of uplift
 - **Adjustable threshold**: Set your own vibe score cutoff
 - **Debug mode**: Optionally show vibe scores on tweets
 - **Local database**: Stores all tweets you see in IndexedDB for future features
+- **AI scoring**: Uses Groq GPT-OSS 20B when you add a Groq API key; falls back to keyword scoring if the API is unavailable
 
 ### Scoring System
 The algorithm scores tweets from -100 (pure outrage) to +100 (enlightening) based on:
@@ -39,24 +40,22 @@ The algorithm scores tweets from -100 (pure outrage) to +100 (enlightening) base
 
 1. **Clone or download this repository**
    ```bash
-   git clone https://github.com/yourusername/XFeedParadise.git
-   cd XFeedParadise
+   git clone https://github.com/opentoolshub/xfeedparadise.git
+   cd xfeedparadise
    ```
 
-2. **Generate icons** (optional but recommended)
-   - Open `generate-icons.html` in a browser
-   - Right-click each canvas and save as `icon16.png`, `icon48.png`, `icon128.png`
-   - Move them to the `icons/` folder
-
-   Or run: `cd icons && node create-icons.js` for placeholder icons
-
-3. **Load in Chrome**
+2. **Load in Chrome**
    - Open Chrome and go to `chrome://extensions/`
    - Enable "Developer mode" (toggle in top right)
    - Click "Load unpacked"
    - Select the `XFeedParadise` folder
 
-4. **Visit X/Twitter**
+3. **Configure Groq AI scoring**
+   - Get a key from [GroqCloud](https://console.groq.com/keys), then open the extension popup and paste it into **Groq API Key · GPT-OSS 20B**.
+   - The key is saved in Chrome sync storage. The extension does not bundle an API key.
+   - Without a working key, the extension uses local keyword scoring.
+
+4. **Visit X/Twitter or Google News**
    - Go to https://x.com or https://twitter.com
    - The extension will start filtering your feed automatically
 
@@ -90,7 +89,7 @@ All tweets are stored locally in your browser using IndexedDB:
 - Timestamp when collected
 - Which feed it came from
 
-This data never leaves your browser and can be cleared via the popup.
+When AI scoring is enabled, tweet or news-item text is sent to Groq for scoring. Local browsing data can be cleared via the popup.
 
 ## Future Roadmap
 

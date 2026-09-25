@@ -1,6 +1,6 @@
 # Privacy Policy for XFeed Paradise
 
-**Last Updated:** December 9, 2024
+**Last Updated:** September 24, 2026
 
 ## Overview
 
@@ -8,19 +8,16 @@ XFeed Paradise is a browser extension that filters your social media feeds to su
 
 ## Data Collection
 
-### Data Stored Locally
-The following data is stored **only on your device** using Chrome's local storage:
-- Your filter settings and preferences
-- Cached tweet/post data for scoring purposes
-- Your Groq API key (if you provide one)
+### Browser Storage
+- Filter settings and your Groq API key (if provided) are saved in Chrome `storage.sync`, which may sync across devices signed in to the same Chrome account.
+- Cached tweet/post data is saved locally in IndexedDB.
 
 ### Data Sent to External Services
 
 #### Groq API (Optional)
 If you enable AI-powered scoring:
-- Tweet/post text is sent to Groq's API for sentiment analysis
-- No personally identifiable information is sent
-- You can use your own API key or the default shared key
+- Tweet/post or news-item text is sent to Groq's API for sentiment analysis. This text may itself contain personal information.
+- The extension uses the API key you provide; it does not include a shared key.
 - See [Groq's Privacy Policy](https://groq.com/privacy-policy/)
 
 #### Community Sync (Optional)
@@ -28,7 +25,7 @@ If you enable "Sync to community feed":
 - A randomly generated anonymous user ID is created
 - Tweet/post metadata (text, author handle, scores) may be synced to our Supabase database
 - This data is used to build a shared curated feed
-- **No personal information is collected or linked to this data**
+- Author handles and post text may identify people, even though the generated user ID is anonymous.
 - You can disable this feature at any time in Settings
 
 ### Data We Do NOT Collect
@@ -39,9 +36,9 @@ If you enable "Sync to community feed":
 
 ## Data Storage
 
-- Local data is stored using Chrome's `storage.sync` and IndexedDB APIs
+- Browser data is stored using Chrome's `storage.sync` and IndexedDB APIs as described above
 - Synced community data is stored on Supabase servers (US-based)
-- We do not sell or share your data with third parties
+- We do not sell your data. Groq and Supabase receive the limited data described above when their respective features are enabled.
 
 ## Your Rights
 
@@ -49,7 +46,7 @@ You can:
 - Disable the extension at any time
 - Clear all stored data via Settings > "Clear stored data"
 - Disable community sync in Settings
-- Use your own Groq API key instead of the shared one
+- Remove your Groq API key in the extension popup to use keyword-only scoring
 
 ## Third-Party Services
 
@@ -64,9 +61,9 @@ We may update this privacy policy from time to time. Changes will be posted to t
 ## Contact
 
 For questions about this privacy policy, please open an issue at:
-https://github.com/tmad4000/XFeedParadise/issues
+https://github.com/opentoolshub/xfeedparadise/issues
 
 ## Open Source
 
 This extension is open source. You can review all code at:
-https://github.com/tmad4000/XFeedParadise
+https://github.com/opentoolshub/xfeedparadise
