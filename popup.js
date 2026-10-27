@@ -150,89 +150,212 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
-  // Groq API Key handling
-  const apiKeyInput = document.getElementById('groqApiKey');
-  const toggleApiKeyBtn = document.getElementById('toggleApiKey');
-  const testGroqBtn = document.getElementById('testGroqConnection');
-  const customPromptInput = document.getElementById('customPrompt');
+  // ---- AI provider settings: one active provider, optional fallback ----
+  const P = XFPProviders;
+  const $ = id => document.getElementById(id);
+  const customPromptInput = $('customPrompt');
+  const slots = {
+    primary: {
+      select: $('providerSelect'), key: $('providerApiKey'), toggle: $('toggleApiKey'),
+      keyLabel: $('providerKeyLabel'), keyLink: $('providerKeyLink'), keyHint: $('providerKeyHint'),
+      baseUrlRow: $('providerBaseUrlRow'), baseUrl: $('providerBaseUrl'), model: $('providerModel'),
+      test: $('testProvider')
+    },
+    fallback: {
+      select: $('fallbackSelect'), fields: $('fallbackFields'), key: $('fallbackApiKey'), toggle: $('toggleFallbackKey'),
+      keyLabel: $('fallbackKeyLabel'), keyLink: $('fallbackKeyLink'), keyHint: $('fallbackKeyHint'),
+      baseUrlRow: $('fallbackBaseUrlRow'), baseUrl: $('fallbackBaseUrl'), model: $('fallbackModel'),
+      test: $('testFallback')
+    }
+  };
+  let providerConfig = await P.loadConfig();
 
-  // Load saved API key and Custom Prompt
-  chrome.storage.sync.get(['groqApiKey', 'customPrompt'], async (result) => {
-    if (result.groqApiKey) {
-      apiKeyInput.value = result.groqApiKey;
+  function addOption(select, value, label) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    select.appendChild(option);
+  }
+
+  for (const id of P.ORDER) {
+    addOption(slots.primary.select, id, id === 'groq' ? `${P.PROVIDERS[id].name} (free key)` : P.PROVIDERS[id].name);
+  }
+  addOption(slots.fallback.select, '', 'None (keywords only)');
+  for (const id of P.ORDER) addOption(slots.fallback.select, id, P.PROVIDERS[id].name);
+
+  const selectedId = slotName => slots[slotName].select.value || null;
+
+  function renderSlot(slotName) {
+    const slot = slots[slotName];
+    const id = selectedId(slotName);
+    if (slot.fields) slot.fields.hidden = !id;
+    if (!id) return;
+    const def = P.PROVIDERS[id];
+    const entry = providerConfig.providers[id];
+    slot.keyLabel.textContent = `${P.displayName(id)} API key${def.keyOptional ? ' (optional)' : ''}`;
+    slot.keyLink.hidden = !def.keyUrl;
+    if (def.keyUrl) slot.keyLink.href = def.keyUrl;
+    slot.keyHint.textContent = def.keyHint || '';
+    slot.key.value = entry.apiKey;
+    slot.key.placeholder = def.keyPlaceholder || '';
+    slot.baseUrlRow.hidden = !def.customBaseUrl;
+    slot.baseUrl.value = def.customBaseUrl ? entry.baseUrl : '';
+    slot.model.value = entry.model;
+    slot.model.placeholder = def.defaultModel || 'Model name, e.g. llama3.2';
+  }
+
+  function renderPrivacy() {
+    const target = id => (P.PROVIDERS[id].customBaseUrl ? 'your custom endpoint' : P.displayName(id));
+    const fallback = providerConfig.fallback;
+    $('providerPrivacy').textContent = `AI scoring sends post text to ${target(providerConfig.primary)}` +
+      `${fallback ? ` (or ${target(fallback)} as fallback)` : ''}, using your key. ` +
+      'Feed items are not uploaded to a community database.';
+    // The fallback cannot be the same provider as the primary.
+    for (const option of slots.fallback.select.options) {
+      option.disabled = option.value !== '' && option.value === providerConfig.primary;
+    }
+  }
+
+  function renderAll() {
+    slots.primary.select.value = providerConfig.primary;
+    slots.fallback.select.value = providerConfig.fallback || '';
+    renderSlot('primary');
+    renderSlot('fallback');
+    renderPrivacy();
+  }
+
+  function readSlot(slotName) {
+    const slot = slots[slotName];
+    return { apiKey: slot.key.value.trim(), model: slot.model.value.trim(), baseUrl: slot.baseUrl.value.trim() };
+  }
+
+  // Ask for the provider's host permission. Starts synchronously so the
+  // request happens inside the user gesture that triggered it.
+  function requestPermission(slotName) {
+    const id = selectedId(slotName);
+    if (!id) return Promise.resolve(false);
+    if (P.PROVIDERS[id].requiredPermission) return Promise.resolve(true);
+    const origin = P.permissionOrigin(id, slots[slotName].baseUrl.value.trim());
+    if (!origin || !chrome.permissions) return Promise.resolve(false);
+    return chrome.permissions.request({ origins: [origin] }).catch(() => false);
+  }
+
+  async function hasPermission(id) {
+    if (P.PROVIDERS[id].requiredPermission) return true;
+    const origin = P.permissionOrigin(id, providerConfig.providers[id].baseUrl);
+    if (!origin) return false;
+    try { return await chrome.permissions.contains({ origins: [origin] }); } catch (e) { return false; }
+  }
+
+  async function saveSlot(slotName) {
+    const id = selectedId(slotName);
+    if (!id) return;
+    await P.saveProvider(id, readSlot(slotName));
+    providerConfig = await P.loadConfig();
+    sendToContentScript({ type: 'UPDATE_PROVIDER' });
+    updateAIStatus();
+  }
+
+  async function testSlot(slotName, granted) {
+    const id = selectedId(slotName);
+    const slot = slots[slotName];
+    if (!id || !P.isConfigured(providerConfig.providers[id])) {
+      updateAIStatus();
+      return;
+    }
+    if (granted === false) {
+      await P.recordStatus(id, 'permission_needed');
+      updateAIStatus();
+      return;
+    }
+    slot.test.disabled = true;
+    slot.test.textContent = 'Checking…';
+    try {
+      await chrome.runtime.sendMessage({ type: 'XFP_TEST_PROVIDER', provider: id });
+    } catch (error) {
+      await P.recordStatus(id, 'network_error');
+    } finally {
+      slot.test.disabled = false;
+      slot.test.textContent = 'Test connection';
     }
     updateAIStatus();
-    if (result.groqApiKey?.startsWith('gsk_')) {
-      const { xfpGroqStatus } = await chrome.storage.local.get('xfpGroqStatus');
-      if (!xfpGroqStatus || Date.now() - xfpGroqStatus.checkedAt > 15 * 60 * 1000) {
-        testGroqConnection(result.groqApiKey);
-      }
+  }
+
+  renderAll();
+  updateAIStatus();
+
+  slots.primary.select.addEventListener('change', async () => {
+    const primary = selectedId('primary');
+    const update = { primary };
+    if (providerConfig.fallback === primary) update.fallback = '';
+    await P.saveSelection(update);
+    providerConfig = await P.loadConfig();
+    renderAll();
+    sendToContentScript({ type: 'UPDATE_PROVIDER' });
+    updateAIStatus();
+  });
+
+  slots.fallback.select.addEventListener('change', async () => {
+    await P.saveSelection({ fallback: selectedId('fallback') || '' });
+    providerConfig = await P.loadConfig();
+    renderAll();
+    sendToContentScript({ type: 'UPDATE_PROVIDER' });
+    updateAIStatus();
+  });
+
+  for (const slotName of Object.keys(slots)) {
+    const slot = slots[slotName];
+    for (const input of [slot.key, slot.model, slot.baseUrl]) {
+      input.addEventListener('change', async () => {
+        const permission = requestPermission(slotName);
+        await saveSlot(slotName);
+        const id = selectedId(slotName);
+        if (id && P.isConfigured(providerConfig.providers[id])) testSlot(slotName, await permission);
+      });
     }
-    
-    // Load custom prompt or use default placeholder logic
-    // We don't have direct access to the default prompt string here easily without duplicating it or messaging content script.
-    // However, to satisfy "show the default prompt", we can fetch it from content script or hardcode it since it's constant.
-    // Better to fetch to keep DRY.
+    slot.test.addEventListener('click', async () => {
+      const permission = requestPermission(slotName);
+      await saveSlot(slotName);
+      testSlot(slotName, await permission);
+    });
+    slot.toggle.addEventListener('click', () => {
+      const show = slot.key.type === 'password';
+      slot.key.type = show ? 'text' : 'password';
+      slot.toggle.textContent = show ? 'Hide' : 'Show';
+    });
+  }
+
+  // First run after an upgrade: check the active provider once if it has no status yet.
+  (async () => {
+    const id = providerConfig.primary;
+    if (!P.isConfigured(providerConfig.providers[id])) return;
+    const statuses = await P.loadStatuses();
+    if (!statuses[id]) testSlot('primary', await hasPermission(id));
+  })();
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && Object.keys(changes).some(key => key.startsWith('xfpStatus_'))) updateAIStatus();
+  });
+
+  // Custom prompt: show the saved prompt, or the default one so it can be edited.
+  chrome.storage.sync.get(['customPrompt'], (result) => {
     if (result.customPrompt) {
       customPromptInput.value = result.customPrompt;
     } else {
-      // Fetch default prompt from content script
       sendToContentScript({ type: 'GET_DEFAULT_PROMPT' }).then(response => {
-        if (response && response.defaultPrompt) {
-          customPromptInput.placeholder = `Default: ${response.defaultPrompt.substring(0, 50)}...`;
-          // If the user wants to see the full default, we could maybe set it as value? 
-          // The request said "show the default prompt that we're using".
-          // If value is empty, showing placeholder is standard, but maybe pre-filling it is better?
-          // Let's rely on the placeholder for now, or fetch full default on focus?
-          // Actually, let's leave it blank with placeholder, but if they want to edit, they usually copy default.
-          // Wait, requirement: "show the default prompt that we're using".
-          // If I just set the value to the default prompt when it's null, that works best.
-          customPromptInput.value = response.defaultPrompt;
-        }
+        if (response && response.defaultPrompt) customPromptInput.value = response.defaultPrompt;
       });
     }
   });
 
-  // Toggle show/hide API key
-  toggleApiKeyBtn.addEventListener('click', () => {
-    if (apiKeyInput.type === 'password') {
-      apiKeyInput.type = 'text';
-      toggleApiKeyBtn.textContent = 'Hide';
-    } else {
-      apiKeyInput.type = 'password';
-      toggleApiKeyBtn.textContent = 'Show';
-    }
-  });
-
-  // Save API key on change
-  apiKeyInput.addEventListener('change', async () => {
-    const apiKey = apiKeyInput.value.trim();
-    await chrome.storage.local.remove('xfpGroqStatus');
-    await chrome.storage.sync.set({ groqApiKey: apiKey });
-    updateAIStatus();
-    // Notify content script of new API key
-    sendToContentScript({ type: 'UPDATE_GROQ_API_KEY', apiKey });
-    showRefreshNotice();
-    if (apiKey.startsWith('gsk_')) testGroqConnection(apiKey);
-  });
-
-  testGroqBtn.addEventListener('click', () => testGroqConnection(apiKeyInput.value.trim()));
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && changes.xfpGroqStatus) updateAIStatus();
-  });
-
-  // Save Custom Prompt on change
+  // Save Custom Prompt on change (empty = use the default prompt)
   customPromptInput.addEventListener('change', async () => {
     const prompt = customPromptInput.value.trim();
-    // If user clears it, we save null so default is used next time (or immediately)
-    // But we also want to restore the default text visually if they clear it?
-    // Let's just save what they typed.
-    // If they explicitly clear it (empty string), we treat as null.
     const valueToSave = prompt === '' ? null : prompt;
-    
+
     await chrome.storage.sync.set({ customPrompt: valueToSave });
     sendToContentScript({ type: 'UPDATE_CUSTOM_PROMPT', prompt: valueToSave });
-    
+
     // If cleared, re-fetch default to show it
     if (valueToSave === null) {
        const response = await sendToContentScript({ type: 'GET_DEFAULT_PROMPT' });
@@ -243,91 +366,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     showRefreshNotice();
   });
 
-  // Advanced section toggle
-  const advancedToggle = document.getElementById('advancedToggle');
-  const advancedContent = document.getElementById('advancedContent');
+  // Advanced section toggle (fallback provider + usage)
+  const advancedToggle = $('advancedToggle');
+  const advancedContent = $('advancedContent');
 
   advancedToggle.addEventListener('click', () => {
     advancedToggle.classList.toggle('expanded');
     advancedContent.classList.toggle('show');
-    // Fetch usage stats when expanded
-    if (advancedContent.classList.contains('show')) {
-      updateUsageStats();
-    }
+    const open = advancedContent.classList.contains('show');
+    advancedToggle.setAttribute('aria-expanded', String(open));
+    if (open) updateUsageStats();
   });
-
-  // Fetch and display Groq usage stats
-  async function updateUsageStats() {
-    const requestsEl = document.getElementById('requestsRemaining');
-    const tokensEl = document.getElementById('tokensRemaining');
-
-    try {
-      const response = await sendToContentScript({ type: 'GET_GROQ_USAGE' });
-      if (response && response.usage) {
-        const usage = response.usage;
-        if (usage.requestsRemaining !== null) {
-          requestsEl.textContent = `${usage.requestsRemaining.toLocaleString()}`;
-        }
-        if (usage.tokensRemaining !== null) {
-          tokensEl.textContent = `${usage.tokensRemaining.toLocaleString()}`;
-        }
-      }
-    } catch (error) {
-      // No usage data yet
-      requestsEl.textContent = 'No data yet';
-      tokensEl.textContent = 'No data yet';
-    }
+  // Open Advanced automatically when a fallback is already configured.
+  if (providerConfig.fallback) {
+    advancedToggle.classList.add('expanded');
+    advancedContent.classList.add('show');
+    advancedToggle.setAttribute('aria-expanded', 'true');
   }
 
-  async function testGroqConnection(apiKey) {
-    if (!apiKey.startsWith('gsk_')) {
-      updateAIStatus();
-      return;
-    }
-
-    testGroqBtn.disabled = true;
-    testGroqBtn.textContent = 'Checking…';
-    const startedAt = Date.now();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    let state = 'network_error';
-    let httpStatus = null;
-
+  // Usage reported by the active provider's rate-limit headers (if any)
+  async function updateUsageStats() {
+    const requestsEl = $('requestsRemaining');
+    const tokensEl = $('tokensRemaining');
     try {
-      const response = await fetch('https://api.groq.com/openai/v1/models', {
-        headers: { Authorization: `Bearer ${apiKey}` },
-        signal: controller.signal
-      });
-      httpStatus = response.status;
-      if (response.ok) {
-        const models = await response.json();
-        state = Array.isArray(models.data) && models.data.some(model => model.id === 'openai/gpt-oss-20b')
-          ? 'available' : 'model_error';
-      } else if (response.status === 401 || response.status === 403) {
-        state = 'auth_error';
-      } else if (response.status === 429) {
-        state = 'rate_limited';
-      } else {
-        state = 'api_error';
-      }
+      const response = await chrome.runtime.sendMessage({ type: 'XFP_GET_USAGE' });
+      if (response && response.providerName) $('usageLabel').textContent = `${response.providerName} usage`;
+      const usage = response && response.usage;
+      requestsEl.textContent = usage && usage.requestsRemaining !== null ? usage.requestsRemaining.toLocaleString() : 'No data yet';
+      tokensEl.textContent = usage && usage.tokensRemaining !== null ? usage.tokensRemaining.toLocaleString() : 'No data yet';
     } catch (error) {
-      state = 'network_error';
-    } finally {
-      clearTimeout(timeout);
-      testGroqBtn.disabled = false;
-      testGroqBtn.textContent = 'Test connection';
-    }
-
-    const saved = await chrome.storage.sync.get('groqApiKey');
-    if (saved.groqApiKey === apiKey) {
-      const { xfpGroqStatus } = await chrome.storage.local.get('xfpGroqStatus');
-      // An actual scoring request may have finished while this probe was in flight.
-      if (!xfpGroqStatus || xfpGroqStatus.checkedAt <= startedAt) {
-        await chrome.storage.local.set({
-          xfpGroqStatus: { state, httpStatus, checkedAt: Date.now() }
-        });
-      }
-      updateAIStatus();
+      requestsEl.textContent = 'No data yet';
+      tokensEl.textContent = 'No data yet';
     }
   }
 
@@ -468,76 +537,46 @@ function escapeHtml(text) {
 }
 
 async function updateAIStatus() {
+  const P = XFPProviders;
   const settings = await loadSettings();
   const statusEl = document.getElementById('aiStatus');
   const indicator = statusEl.querySelector('.ai-indicator');
   const text = statusEl.querySelector('span:last-child');
   const keyStatus = document.getElementById('apiKeyStatus');
-  const [keyResult, statusResult] = await Promise.all([
-    chrome.storage.sync.get('groqApiKey'),
-    chrome.storage.local.get('xfpGroqStatus')
-  ]);
-  const apiKey = keyResult.groqApiKey;
-  const savedStatus = statusResult.xfpGroqStatus;
-  const status = savedStatus && Date.now() - savedStatus.checkedAt <= 15 * 60 * 1000
-    ? savedStatus : null;
+  const [config, statuses] = await Promise.all([P.loadConfig(), P.loadStatuses()]);
+  const primary = config.providers[config.primary];
+  const info = P.describeStatus(primary, statuses[primary.id]);
+  const fallback = config.fallback ? config.providers[config.fallback] : null;
+  const fallbackInfo = fallback ? P.describeStatus(fallback, statuses[fallback.id]) : null;
+  const fallbackUsable = !!(fallback && P.isConfigured(fallback) && fallbackInfo.state !== 'error');
+  const statusClass = state => `api-key-status ${state === 'ready' ? 'connected' : state === 'error' ? 'error' : ''}`;
 
-  let label = 'Add a Groq key to enable AI scoring';
-  let state = 'disabled';
-  if (apiKey && !apiKey.startsWith('gsk_')) {
-    label = 'Invalid Groq key format (expected gsk_)';
-    state = 'error';
-  } else if (apiKey) {
-    switch (status?.state) {
-      case 'working':
-        label = 'Groq AI scoring is working';
-        state = 'ready';
-        break;
-      case 'available':
-        label = 'Groq key and model reachable; scoring not yet verified';
-        state = 'loading';
-        break;
-      case 'auth_error':
-        label = 'Groq rejected this key — check or replace it';
-        state = 'error';
-        break;
-      case 'rate_limited':
-        label = 'Groq rate limit reached — using keyword scoring';
-        state = 'error';
-        break;
-      case 'model_error':
-        label = 'GPT-OSS 20B is unavailable for this key';
-        state = 'error';
-        break;
-      case 'network_error':
-        label = 'Cannot reach Groq — using keyword scoring';
-        state = 'error';
-        break;
-      case 'invalid_response':
-        label = 'Groq returned an unusable score — using keywords';
-        state = 'error';
-        break;
-      case 'api_error':
-        label = `Groq API error${status.httpStatus ? ` (${status.httpStatus})` : ''} — using keywords`;
-        state = 'error';
-        break;
-      default:
-        label = 'Groq key saved; connection not yet verified';
-        state = 'loading';
-    }
+  keyStatus.textContent = info.label;
+  keyStatus.className = statusClass(info.state);
+  const fallbackStatus = document.getElementById('fallbackStatus');
+  if (fallbackStatus) {
+    fallbackStatus.textContent = fallbackInfo ? fallbackInfo.label : '';
+    fallbackStatus.className = statusClass(fallbackInfo ? fallbackInfo.state : '');
   }
 
-  keyStatus.textContent = label;
-  keyStatus.className = `api-key-status ${state === 'ready' ? 'connected' : state === 'error' ? 'error' : ''}`;
+  const next = fallbackUsable
+    ? `Falling back to ${P.displayName(fallback.id)}.`
+    : 'Local keyword filtering remains available.';
   const warning = document.getElementById('connectionWarning');
-  warning.textContent = state === 'error' ? `${label}. Local keyword filtering remains available.` : '';
-  warning.classList.toggle('show', settings.useAI && state === 'error');
+  warning.textContent = info.state === 'error' ? `${info.label}. ${next}` : '';
+  warning.classList.toggle('show', settings.useAI && info.state === 'error');
 
   if (!settings.useAI) {
     indicator.className = 'ai-indicator disabled';
     text.textContent = 'AI scoring disabled';
     return;
   }
-  indicator.className = `ai-indicator ${state}`;
-  text.textContent = apiKey ? label : 'Keywords only — add Groq key';
+  indicator.className = `ai-indicator ${info.state}`;
+  if (info.state === 'disabled') {
+    text.textContent = fallbackUsable
+      ? `Using fallback ${P.displayName(fallback.id)}`
+      : `Keywords only — add your ${P.displayName(primary.id)} key`;
+  } else {
+    text.textContent = info.state === 'error' && fallbackUsable ? `${info.label} · ${next}` : info.label;
+  }
 }

@@ -501,6 +501,55 @@
       color: #ef4444;
     }
 
+    .provider-select {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid #4a5568;
+      border-radius: 6px;
+      padding: 7px 8px;
+      color: #e2e8f0;
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .provider-select:focus {
+      outline: none;
+      border-color: #8b5cf6;
+    }
+
+    .provider-field {
+      margin-top: 8px;
+    }
+
+    .provider-field-label {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+
+    .provider-field .api-key-input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .provider-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .fallback-block {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 8px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
     /* Collapsible sections */
     .collapsible-section {
       background: rgba(255, 255, 255, 0.03);
@@ -827,19 +876,32 @@
           <span>Use AI-powered scoring</span>
         </label>
 
-        <!-- API Key (always visible) -->
-        <div class="api-key-container" style="margin-top: 8px;">
+        <!-- AI provider (one active provider + one key) -->
+        <div class="api-key-container" style="margin-top: 8px;" id="providerCard">
+          <label class="provider-field-label" for="providerSelect">AI provider</label>
+          <select id="providerSelect" class="provider-select" aria-label="AI provider"></select>
           <div class="api-key-label">
-            <span>Groq API Key · GPT-OSS 20B</span>
-            <a href="https://console.groq.com/keys" target="_blank">Get key</a>
+            <span id="providerKeyLabel">Groq API key</span>
+            <a id="providerKeyLink" href="https://console.groq.com/keys" target="_blank" rel="noopener">Get a key</a>
           </div>
           <div class="api-key-input-row">
-            <input type="password" id="groqApiKey" class="api-key-input" placeholder="gsk_...">
-            <button id="toggleApiKey" class="api-key-toggle">Show</button>
+            <input type="password" id="providerApiKey" class="api-key-input" placeholder="gsk_..." autocomplete="off" spellcheck="false" aria-labelledby="providerKeyLabel">
+            <button type="button" id="toggleApiKey" class="api-key-toggle">Show</button>
+          </div>
+          <div class="hint" id="providerKeyHint" style="margin-top: 5px;">Free key, no card required.</div>
+          <div class="provider-field" id="providerBaseUrlRow" hidden>
+            <label class="provider-field-label" for="providerBaseUrl">Base URL</label>
+            <input type="url" id="providerBaseUrl" class="api-key-input" placeholder="http://localhost:11434/v1" spellcheck="false">
+          </div>
+          <div class="provider-field">
+            <label class="provider-field-label" for="providerModel">Model</label>
+            <input type="text" id="providerModel" class="api-key-input" placeholder="openai/gpt-oss-20b" spellcheck="false">
           </div>
           <div id="apiKeyStatus" class="api-key-status" role="status" aria-live="polite">Add a Groq key to enable AI scoring</div>
-          <button type="button" id="testGroqConnection" class="api-key-toggle" style="margin-top: 7px;">Test connection</button>
-          <div class="hint" style="margin-top: 7px;">AI scoring sends post text to Groq. Feed items are not uploaded to a community database.</div>
+          <div class="provider-actions">
+            <button type="button" id="testProvider" class="api-key-toggle">Test connection</button>
+          </div>
+          <div class="hint" id="providerPrivacy" style="margin-top: 7px;">AI scoring sends post text to Groq. Feed items are not uploaded to a community database.</div>
         </div>
 
         <!-- Custom Prompt (always visible, prominent) -->
@@ -855,21 +917,49 @@ Consider: Is it constructive? Informative? Does it spark joy or outrage?"></text
 
         <!-- Advanced Settings (behind gear) -->
         <div style="display: flex; align-items: center; gap: 8px; margin-top: 12px;">
-          <button class="gear-btn-prominent" id="advancedToggle" title="API Usage Stats">
+          <button class="gear-btn-prominent" id="advancedToggle" title="Fallback provider and API usage" aria-expanded="false" aria-controls="advancedContent">
             <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
-            <span>API Usage</span>
+            <span>Advanced</span>
           </button>
         </div>
 
         <div class="advanced-content" id="advancedContent">
+          <div class="fallback-block" id="fallbackCard">
+            <label class="provider-field-label" for="fallbackSelect">Fallback provider</label>
+            <select id="fallbackSelect" class="provider-select" aria-label="Fallback provider"></select>
+            <div class="hint" id="fallbackIntro">Used when the main provider fails, hits a rate limit or returns an unusable score. Keyword scoring is the last resort.</div>
+            <div id="fallbackFields" hidden>
+              <div class="api-key-label" style="margin-top: 8px;">
+                <span id="fallbackKeyLabel">API key</span>
+                <a id="fallbackKeyLink" href="#" target="_blank" rel="noopener">Get a key</a>
+              </div>
+              <div class="api-key-input-row">
+                <input type="password" id="fallbackApiKey" class="api-key-input" autocomplete="off" spellcheck="false" aria-labelledby="fallbackKeyLabel">
+                <button type="button" id="toggleFallbackKey" class="api-key-toggle">Show</button>
+              </div>
+              <div class="hint" id="fallbackKeyHint" style="margin-top: 5px;"></div>
+              <div class="provider-field" id="fallbackBaseUrlRow" hidden>
+                <label class="provider-field-label" for="fallbackBaseUrl">Base URL</label>
+                <input type="url" id="fallbackBaseUrl" class="api-key-input" placeholder="http://localhost:11434/v1" spellcheck="false">
+              </div>
+              <div class="provider-field">
+                <label class="provider-field-label" for="fallbackModel">Model</label>
+                <input type="text" id="fallbackModel" class="api-key-input" spellcheck="false">
+              </div>
+              <div id="fallbackStatus" class="api-key-status" role="status" aria-live="polite"></div>
+              <div class="provider-actions">
+                <button type="button" id="testFallback" class="api-key-toggle">Test connection</button>
+              </div>
+            </div>
+          </div>
           <div class="usage-stats" id="usageStats">
-            <div class="usage-label">API Usage</div>
+            <div class="usage-label" id="usageLabel">API Usage</div>
             <div class="usage-row">
               <span>Requests remaining:</span>
               <span id="requestsRemaining">-</span>
             </div>
             <div class="usage-row">
-              <span>Tokens this minute:</span>
+              <span>Tokens remaining:</span>
               <span id="tokensRemaining">-</span>
             </div>
           </div>
@@ -933,10 +1023,11 @@ Consider: Is it constructive? Informative? Does it spark joy or outrage?"></text
 
       <!-- Clear Data -->
       <button class="clear-btn" id="clearData">Clear stored data</button>
-      <div style="margin-top: 12px; color: #64748b; font-size: 11px; text-align: center;">XFeed Paradise v1.3.2</div>
+      <div style="margin-top: 12px; color: #64748b; font-size: 11px; text-align: center;">XFeed Paradise v1.3.3</div>
     </div>
   </div>
 
+  <script src="providers.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
