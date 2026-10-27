@@ -1,6 +1,6 @@
 # Privacy Policy for XFeed Paradise
 
-**Last Updated:** September 24, 2026 (v1.3.2)
+**Last Updated:** October 26, 2026 (v1.3.3)
 
 ## Overview
 
@@ -9,16 +9,18 @@ XFeed Paradise is a browser extension that filters your social media feeds to su
 ## Data Collection
 
 ### Browser Storage
-- Filter settings and your Groq API key (if provided) are saved in Chrome `storage.sync`, which may sync across devices signed in to the same Chrome account.
+- Filter settings, your chosen AI provider and model, and any API keys you provide are saved in Chrome `storage.sync`, which may sync across devices signed in to the same Chrome account. Connection status is saved in local extension storage. Keys are never written to logs or status messages.
 - Cached tweet/post data is saved locally in IndexedDB.
 
 ### Data Sent to External Services
 
-#### Groq API (Optional)
-If you enable AI-powered scoring and provide a Groq key:
-- Tweet/post or news-item text is sent to Groq's API for sentiment analysis. This text may itself contain personal information.
-- The extension uses the API key you provide; it does not include a shared key.
-- See [Groq's Privacy Policy](https://groq.com/privacy-policy/)
+#### AI provider you choose (Optional)
+Nothing is sent to any AI provider unless you add a key (or, for a custom endpoint, a base URL). If you enable AI-powered scoring:
+- Tweet/post or news-item text is sent to the provider you select for sentiment scoring. This text may itself contain personal information.
+- If you configure a fallback provider, the same text is sent to it only when the main provider fails, is rate-limited or returns an unusable score.
+- The extension uses the API key you provide; it does not include a shared key. Each provider receives only its own key.
+- Supported providers and their privacy policies: [Groq](https://groq.com/privacy-policy/), [OpenAI](https://openai.com/policies/privacy-policy/), [Anthropic](https://www.anthropic.com/legal/privacy), [Google Gemini API](https://ai.google.dev/gemini-api/terms), [OpenRouter](https://openrouter.ai/privacy), [Together AI](https://www.together.ai/privacy), [TypeSafe](https://typesafe.ai). A custom endpoint (for example, a local Ollama server) receives the text at the URL you enter.
+- For providers other than Groq, Chrome asks for your permission before the extension can contact that provider's host.
 
 The extension does not upload viewed feed items to a community database. A previous version had a community-sync setting; this release no longer uses it, including for existing installations where that setting was enabled.
 
@@ -31,19 +33,19 @@ The extension does not upload viewed feed items to a community database. A previ
 ## Data Storage
 
 - Browser data is stored using Chrome's `storage.sync` and IndexedDB APIs as described above
-- We do not sell your data. Groq receives the scoring text described above only when AI scoring is enabled with your key.
+- We do not sell your data. Your selected AI provider (and fallback, if configured) receives the scoring text described above only when AI scoring is enabled with your key.
 
 ## Your Rights
 
 You can:
 - Disable the extension at any time
 - Clear all stored data via Settings > "Clear stored data"
-- Remove your Groq API key in the extension popup to use keyword-only scoring
+- Remove your API key(s) in the extension popup to use keyword-only scoring
 
 ## Third-Party Services
 
 This extension uses:
-- **Groq API** for AI sentiment analysis - [Privacy Policy](https://groq.com/privacy-policy/)
+- The AI provider you select (and an optional fallback) for sentiment analysis, as listed above. No provider is used unless you add a key.
 
 ## Changes to This Policy
 
