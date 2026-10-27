@@ -113,3 +113,12 @@ test('Safari build copies referenced files and makes a classic background worker
     fs.rmSync(out, { recursive: true, force: true });
   }
 });
+
+test('changing filter mode re-filters x.com posts instead of un-filtering them', () => {
+  const source = read('content.js');
+  const body = source.slice(source.indexOf('function reprocessVisibleTweets'), source.indexOf('function createFloatingPanel'));
+  // registerTweet/processTweet skip articles that still carry these flags.
+  assert.match(body, /delete article\.dataset\.xfpProcessed/);
+  assert.match(body, /delete article\.dataset\.xfpObserved/);
+  assert.match(body, /'xfp-revealed'/);
+});
