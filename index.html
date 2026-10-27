@@ -100,10 +100,10 @@
     <h1>A calmer X feed, without leaving X.</h1>
     <p class="lede">XFeed Paradise is a free, open-source Chrome extension. It scores each post on X/Twitter and Google News from −100 (outrage-bait) to +100 (uplifting, thoughtful), then hides, dims, or collapses the ones below your threshold.</p>
     <div class="cta">
-      <a class="btn btn-primary" href="download/xfeed-paradise-v1.3.3.zip" download>Download for Chrome · v1.3.3</a>
+      <a class="btn btn-primary" href="download/xfeed-paradise-v1.4.0.zip" download>Download for Chrome · v1.4.0</a>
       <a class="btn btn-ghost" href="#install">Install steps (2 min)</a>
     </div>
-    <div class="meta">Desktop Chrome, Brave, Edge, Arc and other Chromium browsers · 80 KB · No account needed</div>
+    <div class="meta">Desktop Chrome, Brave, Edge, Arc and other Chromium browsers · 90 KB · No account or API key needed</div>
     <div class="note mobile-only" style="margin-top:14px"><strong>On your phone?</strong> Extensions install on a computer. Open this page on your laptop to set it up.</div>
     <div class="shot"><img src="assets/screenshot-main.png" width="1600" height="1014" alt="X feed with XFeed Paradise vibe scores shown on posts" fetchpriority="high"></div>
     <figure class="vibe-preview">
@@ -122,7 +122,7 @@
     <div class="features">
       <div class="card"><h3>Filters the feed you already use</h3><p>Works directly on x.com, twitter.com and Google News.</p></div>
       <div class="card"><h3>You set the threshold</h3><p>Hide, dim (hover to reveal), or collapse with a “Show anyway” button.</p></div>
-      <div class="card"><h3>Works out of the box</h3><p>Keyword scoring runs locally with no setup. Add your own AI key (Groq is free; OpenAI, Anthropic, Gemini and others work too) for smarter scoring.</p></div>
+      <div class="card"><h3>AI scoring out of the box</h3><p>Built-in AI scoring is free up to 1,000 posts a day, with no key and no account. Add your own key for unlimited scoring.</p></div>
       <div class="card"><h3>Your feed stays yours</h3><p>No account, no community upload. Seen posts stay in your browser.</p></div>
     </div>
   </section>
@@ -132,7 +132,7 @@
     <p class="note" style="margin:0 0 16px"><strong>Why the manual steps?</strong> XFeed Paradise isn’t in the Chrome Web Store yet, so Chrome needs you to load it yourself once. This takes about two minutes.</p>
     <ol class="steps">
       <li><strong>Download and unzip</strong>
-        <p><a href="download/xfeed-paradise-v1.3.3.zip" download>Download xfeed-paradise-v1.3.3.zip</a>, then double-click it to unzip. Move the unzipped folder somewhere permanent, like Documents. Chrome loads it from that folder, so don’t delete it.</p></li>
+        <p><a href="download/xfeed-paradise-v1.4.0.zip" download>Download xfeed-paradise-v1.4.0.zip</a>, then double-click it to unzip. Move the unzipped folder somewhere permanent, like Documents. Chrome loads it from that folder, so don’t delete it.</p></li>
       <li><strong>Open the extensions page</strong>
         <p>Paste <code>chrome://extensions</code><button class="copy" data-copy="chrome://extensions">Copy</button> into the address bar and press Enter. Chrome blocks direct links to this page, so you need to paste it.</p></li>
       <li><strong>Turn on Developer mode</strong>
@@ -140,15 +140,15 @@
       <li><strong>Click “Load unpacked” and choose the folder</strong>
         <p>Select the unzipped folder (the one that contains <code>manifest.json</code>). XFeed Paradise appears in your list. Pin it from the puzzle-piece menu for easy access.</p></li>
       <li><strong>Open X</strong>
-        <p>Go to <a href="https://x.com/home">x.com</a> and scroll. Low-vibe posts start disappearing right away using keyword scoring.</p></li>
+        <p>Go to <a href="https://x.com/home">x.com</a> and scroll. Low-vibe posts start disappearing right away, scored by the built-in AI.</p></li>
     </ol>
   </section>
 
   <section id="ai">
-    <h2>Optional: turn on AI scoring</h2>
+    <h2>Optional: use your own AI key</h2>
     <div class="split">
       <div>
-        <p style="margin-top:0">Keyword scoring catches obvious outrage. For better judgment on subtle posts, connect an AI provider with your own API key. Use whichever one you already have.</p>
+        <p style="margin-top:0">The built-in AI covers 1,000 posts a day per browser. When that runs out, the extension switches to local keyword scoring until the next day. For unlimited scoring, or to choose the model, connect your own API key from whichever provider you already use.</p>
         <ol class="steps">
           <li><strong>Pick a provider</strong><p>Click the XFeed Paradise icon, open <em>Settings &amp; Stats</em>, and choose one under <em>AI provider</em>. Chrome asks once for permission to contact it.</p></li>
           <li><strong>Paste your key</strong><p>Each provider has a <em>Get a key</em> link. The model field is filled in with a fast, cheap default that you can change.</p></li>
@@ -158,7 +158,7 @@
       <img src="assets/screenshot-settings.png" alt="Extension settings with the AI provider dropdown, API key field and model field">
     </div>
     <div class="features" style="margin-top:18px">
-      <div class="card"><h3>Groq · free</h3><p>The default. Free key, no card needed: <a href="https://console.groq.com/keys">console.groq.com/keys</a>.</p></div>
+      <div class="card"><h3>Groq · free</h3><p>Free key, no card needed: <a href="https://console.groq.com/keys">console.groq.com/keys</a>.</p></div>
       <div class="card"><h3>OpenAI · Anthropic · Gemini</h3><p>Already have an OpenAI, Anthropic (Claude) or Google AI Studio API key? Use it. Each post costs a tiny fraction of a cent.</p></div>
       <div class="card"><h3>OpenRouter · Together</h3><p>One key gives you many models. Type any model name they offer.</p></div>
       <div class="card"><h3>TypeSafe Jev</h3><p>A fast model built for scoring rather than chat. Early access at <a href="https://console.typesafe.ai/keys">console.typesafe.ai</a>.</p></div>
@@ -170,7 +170,7 @@
   <section id="faq">
     <h2>FAQ</h2>
     <details><summary>What data leaves my computer?</summary>
-      <p>Without an AI key: nothing. With a key, the text of posts being scored is sent only to the provider you chose (and your fallback, if you set one). Your settings and keys are stored in Chrome sync storage, and posts you’ve seen are cached locally in your browser. There’s no community upload. <a href="https://github.com/opentoolshub/xfeedparadise/blob/main/PRIVACY.md">Privacy policy</a>.</p></details>
+      <p>With the built-in AI, the text of posts being scored goes to our scoring server, which passes it to OpenAI (or TypeSafe) for a score and doesn’t store it. With your own key, the text goes only to the provider you chose (and your fallback, if you set one). With AI turned off, nothing leaves your browser. Your settings and keys are stored in Chrome sync storage, and posts you’ve seen are cached locally in your browser. There’s no community upload. <a href="https://github.com/opentoolshub/xfeedparadise/blob/main/PRIVACY.md">Privacy policy</a>.</p></details>
     <details><summary>Does it work on my phone or in the X app?</summary>
       <p>Not yet. It’s for desktop Chromium browsers. Chrome on Android and iOS doesn’t support extensions, and no browser extension can filter the native X app.</p></details>
     <details><summary>How do I update?</summary>
@@ -182,7 +182,7 @@
   </section>
 
   <footer>
-    XFeed Paradise v1.3.3 · Open source by <a href="https://github.com/opentoolshub">OpenTools Hub</a> ·
+    XFeed Paradise v1.4.0 · Open source by <a href="https://github.com/opentoolshub">OpenTools Hub</a> ·
     <a href="https://github.com/opentoolshub/xfeedparadise/issues">Report a problem</a>
   </footer>
 </div>
