@@ -1,0 +1,14 @@
+{
+  "name": "xfeed-score",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Built-in AI scoring service for the XFeed Paradise extension",
+  "main": "index.js",
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "license": "ISC"
+}
