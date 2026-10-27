@@ -32,7 +32,7 @@ def main(path, version):
         sys.exit("already post-processed")
 
     # File references the converter made into the generated WebExtension dir.
-    refs = re.findall(r"^\t\t([0-9A-F]{24}) /\* [^*]+ \*/ = \{isa = PBXFileReference;[^\n]*path = \"?\.\./\.\./build/WebExtension/",
+    refs = re.findall(r"^\t\t([0-9A-F]{24}) /\* [^*]+ \*/ = \{isa = PBXFileReference;[^\n]*path = \"?(?:\.\./)+[^;\"]*WebExtension/",
                       text, re.M)
     if not refs:
         sys.exit("no WebExtension file references found")
