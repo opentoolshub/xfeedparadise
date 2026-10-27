@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Paradise">
+  <title>Paradise Reader</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app" class="app" data-view="loading">
+    <header class="topbar">
+      <div class="topbar-row">
+        <div class="brand">
+          <img class="brand-mark" src="/icons/icon-192.png" alt="" width="24" height="24">
+          <span class="brand-name">Paradise Reader</span>
+        </div>
+        <button class="avatar-btn" id="accountBtn" type="button" aria-haspopup="dialog" aria-label="Account" hidden>
+          <span id="accountInitial">?</span>
+        </button>
+      </div>
+      <div class="controls" id="controls" hidden>
+        <div class="segmented" role="group" aria-label="Which posts">
+          <button type="button" class="seg" data-mode="kept" aria-pressed="true">Kept only</button>
+          <button type="button" class="seg" data-mode="all" aria-pressed="false">Everything</button>
+        </div>
+        <label class="threshold">
+          <span class="threshold-label">Min vibe <output id="thresholdValue">Any</output></span>
+          <input type="range" id="threshold" min="-50" max="50" step="5" value="-50" aria-label="Minimum vibe score">
+        </label>
+      </div>
+    </header>
+
+    <div class="ptr" id="ptr" aria-hidden="true"><span class="ptr-spinner"></span><span id="ptrText">Pull to refresh</span></div>
+
+    <main class="main">
+      <section class="signin" id="signin" hidden>
+        <img class="signin-mark" src="/icons/icon-192.png" alt="" width="56" height="56">
+        <h1>Your calmer X feed, on your phone</h1>
+        <p>Paradise Reader shows the posts the XFeed Paradise extension scored on your computer, filtered by vibe. It is private to your account.</p>
+        <a class="btn btn-primary" id="signinBtn" href="/auth/login">Sign in with Ideaflow</a>
+        <p class="fineprint">Turn on <strong>Paradise Reader (phone)</strong> in the extension popup to start saving posts. Nothing is saved until you do.</p>
+        <p class="notice" id="signinNotice" hidden></p>
+      </section>
+
+      <div class="status" id="status" hidden></div>
+      <ol class="feed" id="feed" aria-live="polite"></ol>
+      <div class="empty" id="empty" hidden>
+        <h2>Nothing here yet</h2>
+        <p id="emptyText">Turn on <strong>Paradise Reader (phone)</strong> in the XFeed Paradise extension on your computer, then scroll X. Scored posts show up here.</p>
+      </div>
+      <div class="sentinel" id="sentinel"><span class="spinner" id="moreSpinner" hidden></span></div>
+    </main>
+
+    <footer class="footer" id="footer" hidden>
+      <span>Private to you · posts expire after 30 days</span>
+      <span class="version">v0.1.0</span>
+    </footer>
+  </div>
+
+  <dialog class="sheet" id="accountSheet" aria-label="Account">
+    <div class="sheet-body">
+      <div class="sheet-head">
+        <div>
+          <div class="sheet-title" id="accountName">Signed in</div>
+          <div class="sheet-sub" id="accountStats"></div>
+        </div>
+        <button class="icon-btn" type="button" data-close aria-label="Close">✕</button>
+      </div>
+      <p class="sheet-copy">Your reader holds the newest 2,000 posts you synced, for up to 30 days. Only you can see them.</p>
+      <button class="btn btn-ghost" type="button" id="refreshBtn">Refresh</button>
+      <button class="btn btn-ghost" type="button" id="signoutBtn">Sign out</button>
+      <button class="btn btn-danger" type="button" id="deleteBtn">Delete everything</button>
+    </div>
+  </dialog>
+
+  <dialog class="sheet" id="deleteSheet" aria-label="Delete everything">
+    <div class="sheet-body">
+      <div class="sheet-title">Delete every saved post?</div>
+      <p class="sheet-copy">This permanently removes all posts in your Paradise Reader. The extension keeps saving new posts while Paradise Reader is on; turn it off in the extension to stop.</p>
+      <button class="btn btn-danger" type="button" id="confirmDeleteBtn">Delete everything</button>
+      <button class="btn btn-ghost" type="button" data-close>Cancel</button>
+    </div>
+  </dialog>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
