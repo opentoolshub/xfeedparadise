@@ -498,6 +498,7 @@ test('built-in provider is the default for fresh installs and needs a required h
   assert.equal(manifest.version, '1.4.0');
   assert.ok(manifest.host_permissions.includes(`${BUILTIN_URL}/*`));
   assert.equal(P.PROVIDERS.builtin.origin, `${BUILTIN_URL}/*`);
+  assert.ok(read('popup.html').includes(`XFeed Paradise v${manifest.version}<`), 'popup footer version matches manifest');
 });
 
 test('upgrade moves installs without a key to built-in once; users with a key keep theirs', async () => {

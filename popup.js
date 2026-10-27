@@ -17,6 +17,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     btn.classList.toggle('active', btn.dataset.mode === settings.filterMode);
   });
 
+  // Version footer always matches the installed build
+  const versionLabel = document.getElementById('versionLabel');
+  if (versionLabel && chrome.runtime && chrome.runtime.getManifest) {
+    versionLabel.textContent = `XFeed Paradise v${chrome.runtime.getManifest().version}`;
+  }
+
   // Load stats and AI status
   updateStats();
   updateAIStatus();
