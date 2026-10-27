@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XFeed Paradise — a calmer X feed</title>
+<meta name="description" content="Free, open-source Chrome extension that hides outrage-bait on X/Twitter and Google News and keeps the uplifting posts.">
+<meta property="og:title" content="XFeed Paradise — a calmer X feed">
+<meta property="og:description" content="Free Chrome extension that hides outrage-bait on X/Twitter and Google News. Install in two minutes.">
+<meta property="og:image" content="https://opentoolshub.github.io/xfeedparadise/assets/screenshot-main.png">
+<meta property="og:url" content="https://opentoolshub.github.io/xfeedparadise/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/favicon.png">
+<style>
+  :root {
+    --bg: #12141f; --surface: #1b1e2c; --surface-2: #232738; --border: #2d3247;
+    --text: #e6e8f0; --muted: #9aa0b8; --accent: #8b8cf8; --accent-2: #6aa7f8;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+  a { color: var(--accent-2); }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+  header { display: flex; align-items: center; gap: 10px; padding: 20px 0; font-weight: 600; }
+  header img { width: 28px; height: 28px; }
+  header nav { margin-left: auto; font-weight: 400; font-size: 14px; }
+  header nav a { color: var(--muted); text-decoration: none; margin-left: 18px; }
+  header nav a:hover { color: var(--text); }
+  .hero { padding: 40px 0 24px; }
+  h1 { font-size: clamp(30px, 5vw, 42px); line-height: 1.15; margin: 0 0 14px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); font-size: 18px; max-width: 620px; margin: 0 0 26px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 8px;
+    font-weight: 600; text-decoration: none; min-height: 44px; }
+  .btn-primary { background: var(--accent); color: #0d0e17; }
+  .btn-primary:hover { background: #a2a3fb; }
+  .btn-ghost { border: 1px solid var(--border); color: var(--text); }
+  .btn-ghost:hover { border-color: var(--muted); }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 12px; }
+  .shot { margin: 32px 0 8px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .shot img { display: block; width: 100%; height: auto; }
+  section { padding: 36px 0; border-top: 1px solid var(--border); }
+  h2 { font-size: 22px; margin: 0 0 18px; letter-spacing: -0.01em; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 0; display: grid; gap: 12px; }
+  ol.steps > li { counter-increment: s; position: relative; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px 16px 58px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 18px; top: 16px; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--surface-2); border: 1px solid var(--border); color: var(--accent);
+    font-weight: 600; font-size: 14px; display: grid; place-items: center; }
+  ol.steps strong { display: block; margin-bottom: 2px; }
+  ol.steps p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text); }
+  .copy { cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 5px;
+    font-size: 12px; padding: 2px 8px; margin-left: 6px; }
+  .copy:hover { color: var(--text); }
+  .split { display: grid; grid-template-columns: 1fr 260px; gap: 24px; align-items: start; }
+  .split img { width: 100%; border: 1px solid var(--border); border-radius: var(--radius); }
+  .note { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius);
+    padding: 14px 18px; color: var(--muted); font-size: 14px; }
+  .note strong { color: var(--text); }
+  details { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 18px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details p { color: var(--muted); font-size: 14px; margin: 10px 0 4px; }
+  footer { padding: 30px 0 50px; color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+  .mobile-only { display: none; }
+  @media (max-width: 680px) { .mobile-only { display: block; } .split { grid-template-columns: 1fr; } .split img { max-width: 260px; } header nav a:first-child { display: none; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="assets/icon128.png" alt="">
+    XFeed Paradise
+    <nav><a href="#install">Install</a><a href="#faq">FAQ</a><a href="https://github.com/opentoolshub/xfeedparadise">Source</a></nav>
+  </header>
+
+  <div class="hero">
+    <h1>A calmer X feed, without leaving X.</h1>
+    <p class="lede">XFeed Paradise is a free, open-source Chrome extension. It scores each post on X/Twitter and Google News from −100 (outrage-bait) to +100 (uplifting, thoughtful), then hides, dims, or collapses the ones below your threshold.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="download/xfeed-paradise-v1.3.2.zip" download>Download for Chrome · v1.3.2</a>
+      <a class="btn btn-ghost" href="#install">Install steps (2 min)</a>
+    </div>
+    <div class="meta">Desktop Chrome, Brave, Edge, Arc and other Chromium browsers · 70 KB · No account needed</div>
+    <div class="note mobile-only" style="margin-top:14px"><strong>On your phone?</strong> Extensions install on a computer. Open this page on your laptop to set it up.</div>
+    <div class="shot"><img src="assets/screenshot-main.png" alt="X feed with XFeed Paradise vibe scores shown on posts"></div>
+  </div>
+
+  <section>
+    <h2>What it does</h2>
+    <div class="features">
+      <div class="card"><h3>Filters the feed you already use</h3><p>Works directly on x.com, twitter.com and Google News.</p></div>
+      <div class="card"><h3>You set the threshold</h3><p>Hide, dim (hover to reveal), or collapse with a “Show anyway” button.</p></div>
+      <div class="card"><h3>Works out of the box</h3><p>Keyword scoring runs locally with no setup. Add a free Groq key for smarter AI scoring.</p></div>
+      <div class="card"><h3>Your feed stays yours</h3><p>No account, no community upload. Seen posts stay in your browser.</p></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p class="note" style="margin:0 0 16px"><strong>Why the manual steps?</strong> XFeed Paradise isn’t in the Chrome Web Store yet, so Chrome needs you to load it yourself once. This takes about two minutes.</p>
+    <ol class="steps">
+      <li><strong>Download and unzip</strong>
+        <p><a href="download/xfeed-paradise-v1.3.2.zip" download>Download xfeed-paradise-v1.3.2.zip</a>, then double-click it to unzip. Move the unzipped folder somewhere permanent, like Documents. Chrome loads it from that folder, so don’t delete it.</p></li>
+      <li><strong>Open the extensions page</strong>
+        <p>Paste <code>chrome://extensions</code><button class="copy" data-copy="chrome://extensions">Copy</button> into the address bar and press Enter. Chrome blocks direct links to this page, so you need to paste it.</p></li>
+      <li><strong>Turn on Developer mode</strong>
+        <p>Use the toggle in the top-right corner of that page.</p></li>
+      <li><strong>Click “Load unpacked” and choose the folder</strong>
+        <p>Select the unzipped folder (the one that contains <code>manifest.json</code>). XFeed Paradise appears in your list. Pin it from the puzzle-piece menu for easy access.</p></li>
+      <li><strong>Open X</strong>
+        <p>Go to <a href="https://x.com/home">x.com</a> and scroll. Low-vibe posts start disappearing right away using keyword scoring.</p></li>
+    </ol>
+  </section>
+
+  <section id="ai">
+    <h2>Optional: turn on AI scoring</h2>
+    <div class="split">
+      <div>
+        <p style="margin-top:0">Keyword scoring catches obvious outrage. For better judgment on subtle posts, give the extension a free Groq API key. It uses the GPT-OSS 20B model.</p>
+        <ol class="steps">
+          <li><strong>Get a free key</strong><p>Sign in at <a href="https://console.groq.com/keys">console.groq.com/keys</a> and click “Create API Key.” It starts with <code>gsk_</code>.</p></li>
+          <li><strong>Paste it into the extension</strong><p>Click the XFeed Paradise icon, open <em>Settings &amp; Stats</em>, and paste it into <em>Groq API Key</em>.</p></li>
+          <li><strong>Click “Test connection”</strong><p>A green status means AI scoring is live. If Groq is down or rate-limited, the extension falls back to keyword scoring and tells you.</p></li>
+        </ol>
+      </div>
+      <img src="assets/screenshot-settings.png" alt="Extension settings panel with the Groq API key field">
+    </div>
+  </section>
+
+  <section id="faq">
+    <h2>FAQ</h2>
+    <details><summary>What data leaves my computer?</summary>
+      <p>Without a Groq key: nothing. With a Groq key, the text of posts being scored is sent to Groq for scoring. Your settings and key are stored in Chrome sync storage, and posts you’ve seen are cached locally in your browser. There’s no community upload. <a href="https://github.com/opentoolshub/xfeedparadise/blob/main/PRIVACY.md">Privacy policy</a>.</p></details>
+    <details><summary>Does it work on my phone or in the X app?</summary>
+      <p>Not yet. It’s for desktop Chromium browsers. Chrome on Android and iOS doesn’t support extensions, and no browser extension can filter the native X app.</p></details>
+    <details><summary>How do I update?</summary>
+      <p>Download the new ZIP from this page and unzip it over your existing folder. Then click the reload icon on XFeed Paradise’s card in <code>chrome://extensions</code>. Your settings are kept.</p></details>
+    <details><summary>Chrome shows a “developer mode extensions” warning</summary>
+      <p>That’s normal for extensions loaded outside the Web Store. You can dismiss it. The full source is on <a href="https://github.com/opentoolshub/xfeedparadise">GitHub</a> if you want to check what it does.</p></details>
+    <details><summary>How do I pause or remove it?</summary>
+      <p>Toggle filtering off in the popup, or click <em>Remove</em> on its card in <code>chrome://extensions</code>.</p></details>
+  </section>
+
+  <footer>
+    XFeed Paradise v1.3.2 · Open source by <a href="https://github.com/opentoolshub">OpenTools Hub</a> ·
+    <a href="https://github.com/opentoolshub/xfeedparadise/issues">Report a problem</a>
+  </footer>
+</div>
+<script>
+  document.querySelectorAll('.copy').forEach(b => b.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; }
+    catch { b.textContent = 'Select & copy'; }
+    setTimeout(() => (b.textContent = 'Copy'), 1500);
+  }));
+</script>
+</body>
+</html>
