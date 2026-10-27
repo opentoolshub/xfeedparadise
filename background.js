@@ -4,8 +4,18 @@
 // provider, then the optional fallback. Callers use keywords if both fail.
 
 import './providers.js';
+import './sync.js';
 
 const Providers = globalThis.XFPProviders;
+
+// Paradise Reader (opt-in, off by default): uploads scored X posts to the
+// user's private reader only while they are opted in and signed in.
+const ReaderSync = globalThis.XFPReaderSync.createReaderSync();
+ReaderSync.resume().catch(() => {});
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return false;
+  return ReaderSync.handleMessage(message, sendResponse) ?? false;
+});
 
 let configCache = null;
 

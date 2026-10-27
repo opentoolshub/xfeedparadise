@@ -348,6 +348,38 @@
     }
   }
 
+  // Paradise Reader (opt-in, off by default). Scored posts go to the
+  // background worker (sync.js), which uploads them to the user's private
+  // reader only while they are opted in and signed in. Nothing is sent
+  // while the feature is off or filtering is paused.
+  let readerOn = false;
+  const readerActive = value => Boolean(value && value.optIn && value.account);
+  // Posts on screen at page load are scored before this read finishes.
+  const readerReady = chrome.storage.local.get('xfpReader')
+    .then(r => { readerOn = readerActive(r.xfpReader); })
+    .catch(() => {});
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' && changes.xfpReader) readerOn = readerActive(changes.xfpReader.newValue);
+  });
+  async function readerRecord(article, tweet, score) {
+    await readerReady;
+    if (!readerOn || !VibeFilter.settings.enabled) return;
+    const thumb = article.querySelector('[data-testid="tweetPhoto"] img')?.src || null;
+    chrome.runtime.sendMessage({
+      type: 'XFP_READER_ITEM',
+      item: {
+        id: tweet.id,
+        handle: tweet.authorId,
+        name: tweet.authorName,
+        text: tweet.text,
+        postedAt: tweet.timestamp,
+        score,
+        kept: VibeFilter.shouldShow(score),
+        thumb
+      }
+    }).catch(() => {});
+  }
+
   // Process a single tweet element - FAST, non-blocking
   function processTweet(tweetElement) {
     const article = tweetElement.closest('article[data-testid="tweet"]');
@@ -382,6 +414,7 @@
           // Update in database
           const tweetWithAI = { ...tweet, vibeScore: aiScore, scoredWithAI: aiSource === 'ai' };
           window.tweetDB.saveTweet(tweetWithAI).catch(() => {});
+          readerRecord(article, tweet, aiScore);
         }
       }
     );
@@ -391,6 +424,7 @@
 
     // Apply filter immediately with initial score
     applyFilter(article, tweet, score);
+    readerRecord(article, tweet, score);
 
     // Save to database (non-blocking)
     window.tweetDB.saveTweet(tweet).catch(error => {

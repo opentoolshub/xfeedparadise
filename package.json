@@ -5,7 +5,7 @@
   "main": "ai-scorer.js",
   "scripts": {
     "build": "node build.js",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\""
   },
   "repository": {
     "type": "git",

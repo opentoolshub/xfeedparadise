@@ -24,9 +24,17 @@ OUTPUT="xfeed-paradise-v${VERSION}.zip"
 rm -f "$OUTPUT"
 
 # Package only files required by manifest.json; never bundle old ZIPs or plans.
-zip -r "$OUTPUT" manifest.json popup.html popup.js background.js \
-  content.js content-googlenews.js providers.js filter.js db.js styles.css \
+zip -r "$OUTPUT" manifest.json popup.html popup.js popup-reader.js background.js \
+  content.js content-googlenews.js providers.js filter.js db.js sync.js styles.css \
   icons/icon16.png icons/icon48.png icons/icon128.png
+
+# manifest.json's "key" only pins the unpacked development ID (and its
+# chromiumapp.org sign-in redirect). The store assigns its own ID, so the
+# uploaded manifest leaves the key out.
+STAGE=$(mktemp -d)
+node -e 'const m=require("./manifest.json"); delete m.key; process.stdout.write(JSON.stringify(m, null, 2) + "\n")' > "$STAGE/manifest.json"
+(cd "$STAGE" && zip -q "$OLDPWD/$OUTPUT" manifest.json)
+rm -rf "$STAGE"
 
 # Show result
 echo -e "${GREEN}Build complete!${NC}"

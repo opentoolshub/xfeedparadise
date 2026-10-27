@@ -4,9 +4,11 @@
   "version": "1.3.3",
   "description": "AI-powered feed filter that surfaces uplifting content and hides outrage-bait",
   "homepage_url": "https://github.com/opentoolshub/xfeedparadise",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAow8vo67bfAIklKJVzAK+u/rfeQXiLZwKsu2MEDix+Zg+EZqG52sz2qRaUzBsGnEF1qSkMjuduUxM2yiS/8kP5DHyj0AoTLrq5rLaaHy4Oid7jLIO+2z9uCgx50FLTWosEIFtj+hhbjpFl1+dHWjDkPqtrjkDlwU0Eoe4p+jZ3IRH9lZjRDHvM8o/7RDJ7Ivja42bzF9su46rpaxVjkQqmQeK6ACeXn5tN2V5UZ37+gCkGDwr9ISdAgeDkCItoBLxOdaAZ8vIfuMPNbfGaKLt3+H5MISAWDMjcRvVVHGUv8Z9vUNx9K6V5UBO6xsB6Fsr27cTbmJTcNotkOSCoz4u+QIDAQAB",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "identity"
   ],
   "host_permissions": [
     "https://twitter.com/*",
