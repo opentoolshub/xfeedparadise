@@ -23,37 +23,44 @@
   // Wait for dependencies
   await window.tweetDB.ready;
   await VibeFilter.loadSettings();
-  await VibeFilter.loadGroqApiKey();
+  await VibeFilter.loadProviderConfig();
 
-  // AI Scorer state - uses Groq API
-  let groqApiReady = !!VibeFilter.groqApiKey;
+  // AI scoring state - the configured provider(s) score via the background worker
+  let aiProviderReady = VibeFilter.provider.configured;
 
-  // Check Groq API status
-  async function checkGroqStatus() {
-    groqApiReady = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
-    return groqApiReady;
+  // Re-read provider configuration (primary + fallback)
+  async function checkProviderStatus() {
+    await VibeFilter.loadProviderConfig();
+    aiProviderReady = VibeFilter.provider.configured;
+    return aiProviderReady;
   }
 
-  // Initialize AI (just checks Groq status)
+  // Initialize AI (just checks provider configuration)
   async function initAIScorer() {
-    console.log('🌴 XFeed Paradise: Checking Groq API status...');
-    await checkGroqStatus();
-    if (groqApiReady) {
-      console.log('🌴 XFeed Paradise: Groq key configured; connection not yet verified');
+    await checkProviderStatus();
+    const { primaryName, fallbackName } = VibeFilter.provider;
+    if (aiProviderReady) {
+      console.log(`🌴 XFeed Paradise: ${primaryName} configured${fallbackName ? ` (fallback: ${fallbackName})` : ''}; connection not yet verified`);
     } else {
-      console.log('🌴 XFeed Paradise: No Groq API key - using keyword scoring');
+      console.log(`🌴 XFeed Paradise: No ${primaryName} key - using keyword scoring`);
     }
     updateFloatingPanel();
   }
 
-  // Local AI scorer is disabled - Groq scoring happens in filter.js
+  // Popup changes to provider, key or model apply without a reload
+  VibeFilter.watchProviderConfig(() => {
+    aiProviderReady = VibeFilter.provider.configured;
+    updateFloatingPanel();
+  });
+
+  // Local AI scorer is disabled - provider scoring happens in filter.js
   window.AIScorer = {
     get isReady() { return false; },
     scoreTweet: async () => null
   };
   VibeFilter.aiScorer = window.AIScorer;
 
-  // Check Groq status on init
+  // Check provider status on init
   if (VibeFilter.settings.useAI !== false) {
     initAIScorer();
   }
@@ -91,24 +98,28 @@
 
   // Hook into VibeFilter for rate limit notifications
   let lastRateLimitToast = 0;
-  VibeFilter.onRateLimit = (apiName, waitSeconds) => {
+  VibeFilter.onRateLimit = (apiName, waitSeconds, usingName) => {
     const now = Date.now();
     if (now - lastRateLimitToast > 30000) {
       lastRateLimitToast = now;
-      showToast(`${apiName} rate limited. Using keyword scoring for ${waitSeconds}s`, 'warning', 5000);
+      const using = usingName ? `Using fallback ${usingName}` : 'Using keyword scoring';
+      showToast(`${apiName} rate limited. ${using} for ${waitSeconds}s`, 'warning', 5000);
     }
   };
 
   let lastApiErrorToast = 0;
-  VibeFilter.onApiError = (apiName, reason) => {
+  VibeFilter.onApiError = (apiName, reason, usingName) => {
     const now = Date.now();
     if (now - lastApiErrorToast < 30000) return;
     lastApiErrorToast = now;
     const problem = reason === 401 || reason === 403 ? 'key rejected'
       : reason === 'network_error' ? 'connection failed'
       : reason === 'invalid_response' ? 'unexpected response'
+      : reason === 'model_error' ? 'model unavailable'
+      : reason === 'permission_needed' ? 'access not granted'
       : `error ${reason}`;
-    showToast(`${apiName} ${problem}. Using keyword scoring; check the extension popup.`, 'warning', 6000);
+    const using = usingName ? `Using fallback ${usingName}` : 'Using keyword scoring';
+    showToast(`${apiName} ${problem}. ${using}; check the extension popup.`, 'warning', 6000);
   };
 
   // IntersectionObserver for viewport detection
@@ -516,8 +527,9 @@
       return true;
     } else if (message.type === 'GET_AI_STATUS') {
       sendResponse({
-        aiReady: groqApiReady,
-        aiLoading: !groqApiReady && VibeFilter.settings.useAI,
+        aiReady: aiProviderReady,
+        aiLoading: !aiProviderReady && VibeFilter.settings.useAI,
+        provider: VibeFilter.provider.primary,
         aiProgress: 100
       });
     } else if (message.type === 'TOGGLE_ENABLED') {
@@ -535,18 +547,12 @@
         VibeFilter.settings.floatingHidden = !message.visible;
       }
       sendResponse({ success: true });
-    } else if (message.type === 'UPDATE_GROQ_API_KEY') {
-      VibeFilter.apis.groq.userKey = message.apiKey || null;
-      VibeFilter.apis.groq.disabled = false;
-      VibeFilter.apis.groq.rateLimited = false;
-      checkGroqStatus();
-      updateFloatingPanel();
+    } else if (message.type === 'UPDATE_PROVIDER' || message.type === 'UPDATE_GROQ_API_KEY') {
+      checkProviderStatus().then(() => updateFloatingPanel());
       sendResponse({ success: true });
     } else if (message.type === 'UPDATE_CUSTOM_PROMPT') {
       VibeFilter.customPrompt = message.prompt || null;
       sendResponse({ success: true });
-    } else if (message.type === 'GET_GROQ_USAGE') {
-      sendResponse({ usage: VibeFilter.groqUsage });
     } else if (message.type === 'GET_DEFAULT_PROMPT') {
       sendResponse({ defaultPrompt: VibeFilter.defaultPrompt });
     }
@@ -793,7 +799,7 @@
     useAiCb.addEventListener('change', () => {
       VibeFilter.settings.useAI = useAiCb.checked;
       VibeFilter.saveSettings({ useAI: useAiCb.checked });
-      if (useAiCb.checked && !groqApiReady) {
+      if (useAiCb.checked && !aiProviderReady) {
         initAIScorer();
       }
       reprocessVisibleArticles();
@@ -843,21 +849,22 @@
       hiddenCountLabel.textContent = `(${hiddenCount})`;
     }
 
-    // Update AI status
+    // Update AI status (active provider and optional fallback)
     if (aiDot && aiText) {
-      const activeApi = VibeFilter.getBestApi();
+      const p = VibeFilter.provider;
       if (VibeFilter.settings.useAI === false) {
         aiDot.classList.remove('ready');
         aiText.textContent = 'AI disabled';
-      } else if (activeApi === 'groq') {
+      } else if (VibeFilter.hasAI()) {
         aiDot.classList.add('ready');
-        aiText.textContent = 'Groq GPT-OSS 20B configured';
-      } else if (activeApi === 'together') {
-        aiDot.classList.add('ready');
-        aiText.textContent = 'Together AI configured';
+        const lead = p.primaryConfigured ? `${p.primaryName} configured` : `${p.fallbackName} configured`;
+        aiText.textContent = p.primaryConfigured && p.fallbackName ? `${lead} · fallback ${p.fallbackName}` : lead;
+      } else if (p.configured) {
+        aiDot.classList.remove('ready');
+        aiText.textContent = 'AI unavailable · keywords for now';
       } else {
         aiDot.classList.remove('ready');
-        aiText.textContent = 'Keywords only';
+        aiText.textContent = `Keywords only · add your ${p.primaryName} key`;
       }
     }
 

@@ -21,37 +21,44 @@
   // Wait for dependencies
   await window.tweetDB.ready;
   await VibeFilter.loadSettings();
-  await VibeFilter.loadGroqApiKey();
+  await VibeFilter.loadProviderConfig();
 
-  // AI Scorer state - now uses Groq API instead of local model
-  let groqApiReady = !!VibeFilter.groqApiKey;
+  // AI scoring state - the configured provider(s) score via the background worker
+  let aiProviderReady = VibeFilter.provider.configured;
 
-  // Check Groq API status
-  async function checkGroqStatus() {
-    groqApiReady = !!(VibeFilter.groqApiKey && VibeFilter.groqApiKey.startsWith('gsk_'));
-    return groqApiReady;
+  // Re-read provider configuration (primary + fallback)
+  async function checkProviderStatus() {
+    await VibeFilter.loadProviderConfig();
+    aiProviderReady = VibeFilter.provider.configured;
+    return aiProviderReady;
   }
 
-  // Initialize AI (just checks Groq status)
+  // Initialize AI (just checks provider configuration)
   async function initAIScorer() {
-    console.log('🌴 XFeed Paradise: Checking Groq API status...');
-    await checkGroqStatus();
-    if (groqApiReady) {
-      console.log('🌴 XFeed Paradise: Groq key configured; connection not yet verified');
+    await checkProviderStatus();
+    const { primaryName, fallbackName } = VibeFilter.provider;
+    if (aiProviderReady) {
+      console.log(`🌴 XFeed Paradise: ${primaryName} configured${fallbackName ? ` (fallback: ${fallbackName})` : ''}; connection not yet verified`);
     } else {
-      console.log('🌴 XFeed Paradise: No Groq API key - using keyword scoring');
+      console.log(`🌴 XFeed Paradise: No ${primaryName} key - using keyword scoring`);
     }
     updateFloatingPanel();
   }
 
-  // Local AI scorer is disabled - Groq scoring happens in filter.js
+  // Popup changes to provider, key or model apply without a reload
+  VibeFilter.watchProviderConfig(() => {
+    aiProviderReady = VibeFilter.provider.configured;
+    updateFloatingPanel();
+  });
+
+  // Local AI scorer is disabled - provider scoring happens in filter.js
   window.AIScorer = {
     get isReady() { return false; }, // Local AI disabled
     scoreTweet: async () => null
   };
   VibeFilter.aiScorer = window.AIScorer;
 
-  // Check Groq status on init
+  // Check provider status on init
   if (VibeFilter.settings.useAI !== false) {
     initAIScorer();
   }
@@ -92,25 +99,29 @@
 
   // Hook into VibeFilter for rate limit notifications (debounced to prevent spam)
   let lastRateLimitToast = 0;
-  VibeFilter.onRateLimit = (apiName, waitSeconds) => {
+  VibeFilter.onRateLimit = (apiName, waitSeconds, usingName) => {
     const now = Date.now();
     // Only show toast if it's been at least 30 seconds since last one
     if (now - lastRateLimitToast > 30000) {
       lastRateLimitToast = now;
-      showToast(`${apiName} rate limited. Using keyword scoring for ${waitSeconds}s`, 'warning', 5000);
+      const using = usingName ? `Using fallback ${usingName}` : 'Using keyword scoring';
+      showToast(`${apiName} rate limited. ${using} for ${waitSeconds}s`, 'warning', 5000);
     }
   };
 
   let lastApiErrorToast = 0;
-  VibeFilter.onApiError = (apiName, reason) => {
+  VibeFilter.onApiError = (apiName, reason, usingName) => {
     const now = Date.now();
     if (now - lastApiErrorToast < 30000) return;
     lastApiErrorToast = now;
     const problem = reason === 401 || reason === 403 ? 'key rejected'
       : reason === 'network_error' ? 'connection failed'
       : reason === 'invalid_response' ? 'unexpected response'
+      : reason === 'model_error' ? 'model unavailable'
+      : reason === 'permission_needed' ? 'access not granted'
       : `error ${reason}`;
-    showToast(`${apiName} ${problem}. Using keyword scoring; check the extension popup.`, 'warning', 6000);
+    const using = usingName ? `Using fallback ${usingName}` : 'Using keyword scoring';
+    showToast(`${apiName} ${problem}. ${using}; check the extension popup.`, 'warning', 6000);
   };
 
   // IntersectionObserver for viewport detection - catches fast scrolling & recycled elements
@@ -463,8 +474,9 @@
       return true; // Keep channel open for async response
     } else if (message.type === 'GET_AI_STATUS') {
       sendResponse({
-        aiReady: groqApiReady,
-        aiLoading: !groqApiReady && VibeFilter.settings.useAI,
+        aiReady: aiProviderReady,
+        aiLoading: !aiProviderReady && VibeFilter.settings.useAI,
+        provider: VibeFilter.provider.primary,
         aiProgress: 100
       });
     } else if (message.type === 'TOGGLE_ENABLED') {
@@ -482,23 +494,15 @@
         VibeFilter.settings.floatingHidden = !message.visible;
       }
       sendResponse({ success: true });
-    } else if (message.type === 'UPDATE_GROQ_API_KEY') {
-      // Update Groq API key
-      VibeFilter.apis.groq.userKey = message.apiKey || null;
-      VibeFilter.apis.groq.disabled = false;
-      VibeFilter.apis.groq.rateLimited = false;
-      checkGroqStatus();
-      updateFloatingPanel();
-      console.log('🌴 XFeed Paradise: Groq API key updated');
+    } else if (message.type === 'UPDATE_PROVIDER' || message.type === 'UPDATE_GROQ_API_KEY') {
+      // Provider, key or model changed in the popup
+      checkProviderStatus().then(() => updateFloatingPanel());
       sendResponse({ success: true });
     } else if (message.type === 'UPDATE_CUSTOM_PROMPT') {
       // Update Custom Prompt
       VibeFilter.customPrompt = message.prompt || null;
       console.log('🌴 XFeed Paradise: Custom prompt updated');
       sendResponse({ success: true });
-    } else if (message.type === 'GET_GROQ_USAGE') {
-      // Return Groq API usage stats
-      sendResponse({ usage: VibeFilter.groqUsage });
     } else if (message.type === 'GET_DEFAULT_PROMPT') {
       sendResponse({ defaultPrompt: VibeFilter.defaultPrompt });
     } else if (message.type === 'UPDATE_LOAD_MORE_VISIBILITY') {
@@ -618,7 +622,7 @@
             <div class="xfp-setting-row xfp-ai-status-row">
               <div class="xfp-ai-status-inline">
                 <span class="xfp-ai-dot"></span>
-                <span class="xfp-ai-text">Groq AI active</span>
+                <span class="xfp-ai-text">Checking AI…</span>
               </div>
             </div>
 
@@ -632,12 +636,12 @@
 
             <!-- API Key Section (always visible) -->
             <div class="xfp-api-key-section">
-              <label class="xfp-setting-label">Groq API Key (free) <a href="https://console.groq.com/keys" target="_blank" style="color: #60a5fa; text-decoration: none; font-size: 10px;">Get key</a></label>
+              <label class="xfp-setting-label"><span class="xfp-api-key-name">API Key</span> <a class="xfp-api-key-link" href="https://console.groq.com/keys" target="_blank" rel="noopener" style="color: #60a5fa; text-decoration: none; font-size: 10px;">Get key</a></label>
               <div class="xfp-api-input-row">
-                <input type="password" class="xfp-api-input" placeholder="gsk_...">
+                <input type="password" class="xfp-api-input" placeholder="API key">
                 <button class="xfp-api-toggle-btn">Show</button>
               </div>
-              <div class="xfp-api-status">Add a Groq key to enable GPT-OSS scoring</div>
+              <div class="xfp-api-status">Choose a provider in the extension popup</div>
             </div>
 
             <!-- Custom Prompt Section (always visible) -->
@@ -778,8 +782,27 @@
     const apiStatus = panel.querySelector('.xfp-api-status');
 
     if (apiToggleBtn && apiInput) {
-      // Load current key (masked)
-      apiInput.value = VibeFilter.groqApiKey || '';
+      // Load the active provider's key (masked)
+      const syncProviderKeyField = async () => {
+        const config = await XFPProviders.loadConfig();
+        const def = XFPProviders.PROVIDERS[config.primary];
+        const name = XFPProviders.displayName(config.primary);
+        if (document.activeElement !== apiInput) apiInput.value = config.providers[config.primary].apiKey || '';
+        apiInput.placeholder = def.keyPlaceholder || 'API key';
+        const nameEl = panel.querySelector('.xfp-api-key-name');
+        const linkEl = panel.querySelector('.xfp-api-key-link');
+        if (nameEl) nameEl.textContent = `${name} API Key${def.keyOptional ? ' (optional)' : ''}`;
+        if (linkEl) {
+          linkEl.style.display = def.keyUrl ? '' : 'none';
+          if (def.keyUrl) linkEl.href = def.keyUrl;
+        }
+        if (apiStatus) {
+          const status = (await XFPProviders.loadStatuses())[config.primary];
+          apiStatus.textContent = XFPProviders.describeStatus(config.providers[config.primary], status).label;
+        }
+      };
+      syncProviderKeyField();
+      VibeFilter.watchProviderConfig(syncProviderKeyField);
 
       apiToggleBtn.addEventListener('click', () => {
         if (apiInput.type === 'password') {
@@ -794,10 +817,13 @@
       // Save API key on change
       apiInput.addEventListener('change', async () => {
         const newKey = apiInput.value.trim();
-        await VibeFilter.saveGroqApiKey(newKey);
+        await VibeFilter.saveActiveProviderKey(newKey);
         initAIScorer();
         if (apiStatus) {
-          apiStatus.textContent = newKey ? 'Groq key saved' : 'Add a Groq key to enable GPT-OSS scoring';
+          const name = VibeFilter.provider.primaryName;
+          apiStatus.textContent = newKey
+            ? `${name} key saved. Use Test connection in the extension popup to verify it.`
+            : `Add your ${name} key to enable AI scoring`;
         }
       });
     }
@@ -873,7 +899,7 @@
     useAiCb.addEventListener('change', () => {
       VibeFilter.settings.useAI = useAiCb.checked;
       VibeFilter.saveSettings({ useAI: useAiCb.checked });
-      if (useAiCb.checked && !groqApiReady) {
+      if (useAiCb.checked && !aiProviderReady) {
         initAIScorer();
       }
       reprocessVisibleTweets();
@@ -938,21 +964,22 @@
       hiddenCountLabel.textContent = `(${hiddenCount})`;
     }
 
-    // Update AI status (now shows Groq status)
+    // Update AI status (active provider and optional fallback)
     if (aiDot && aiText) {
-      const activeApi = VibeFilter.getBestApi();
+      const p = VibeFilter.provider;
       if (VibeFilter.settings.useAI === false) {
         aiDot.classList.remove('ready');
         aiText.textContent = 'AI disabled';
-      } else if (activeApi === 'groq') {
+      } else if (VibeFilter.hasAI()) {
         aiDot.classList.add('ready');
-        aiText.textContent = 'Groq GPT-OSS 20B configured';
-      } else if (activeApi === 'together') {
-        aiDot.classList.add('ready');
-        aiText.textContent = 'Together AI configured';
+        const lead = p.primaryConfigured ? `${p.primaryName} configured` : `${p.fallbackName} configured`;
+        aiText.textContent = p.primaryConfigured && p.fallbackName ? `${lead} · fallback ${p.fallbackName}` : lead;
+      } else if (p.configured) {
+        aiDot.classList.remove('ready');
+        aiText.textContent = 'AI unavailable · keywords for now';
       } else {
         aiDot.classList.remove('ready');
-        aiText.textContent = 'Keywords only';
+        aiText.textContent = `Keywords only · add your ${p.primaryName} key`;
       }
     }
 

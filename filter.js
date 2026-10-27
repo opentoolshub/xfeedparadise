@@ -1,6 +1,8 @@
 // Vibe-based tweet filtering algorithm
 // Scores tweets from -100 (pure outrage) to +100 (pure enlightenment)
-// Uses multiple AI APIs with fallback: Groq -> Together.ai -> Keywords
+// Order: primary AI provider -> optional fallback provider -> keywords.
+// Provider HTTP calls run in the background worker (see providers.js);
+// this content-script side batches posts and blends AI with keyword scores.
 
 const VibeFilter = {
   // Default settings
@@ -17,48 +19,24 @@ const VibeFilter = {
 
   aiScorer: null,
 
-  // Callback for rate limit notifications (set by content.js)
+  // Callbacks for provider notifications (set by content scripts).
+  // onRateLimit(name, waitSeconds, usingName) / onApiError(name, reason, usingName)
+  // usingName is the provider now scoring, or null when keywords take over.
   onRateLimit: null,
   onApiError: null,
 
-  reportGroqStatus(state, httpStatus = null) {
-    chrome.storage.local.set({
-      xfpGroqStatus: { state, httpStatus, checkedAt: Date.now() }
-    });
+  // Provider configuration summary (no keys kept here)
+  provider: {
+    primary: 'groq',
+    primaryName: 'Groq',
+    primaryModel: 'openai/gpt-oss-20b',
+    fallback: null,
+    fallbackName: null,
+    configured: false
   },
 
-  // API Configuration
-  apis: {
-    groq: {
-      name: 'Groq',
-      baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
-      model: 'openai/gpt-oss-20b',
-      defaultKey: null,
-      userKey: null,
-      disabled: false,
-      rateLimited: false,
-      rateLimitReset: 0,
-      lastRequest: 0,
-      minInterval: 2200, // ~27 RPM
-      usage: { remaining: null, limit: null }
-    },
-    together: {
-      name: 'Together',
-      baseUrl: 'https://api.together.xyz/v1/chat/completions',
-      model: 'meta-llama/Llama-3.2-3B-Instruct-Turbo',
-      defaultKey: null, // User must provide
-      userKey: null,
-      disabled: false,
-      rateLimited: false,
-      rateLimitReset: 0,
-      lastRequest: 0,
-      minInterval: 1100, // ~55 RPM (under 60 RPM limit)
-      usage: { remaining: null, limit: null }
-    }
-  },
-
-  // Current API preference order
-  apiOrder: ['groq', 'together'],
+  // When every configured provider failed, stay on keywords until this time.
+  aiPausedUntil: 0,
 
   // Batch processing
   batchQueue: [],
@@ -70,7 +48,7 @@ const VibeFilter = {
   // Score cache
   scoreCache: new Map(),
 
-  // Custom prompt
+  // Custom prompt (read by the background worker from storage)
   customPrompt: null,
 
   // Debug logging
@@ -80,54 +58,22 @@ const VibeFilter = {
     }
   },
 
-  // Get active API key for an API
-  getApiKey(apiName) {
-    const api = this.apis[apiName];
-    return api?.userKey || api?.defaultKey;
+  // True when at least one provider is configured and not paused.
+  hasAI() {
+    return this.provider.configured && Date.now() >= this.aiPausedUntil;
   },
 
-  // Check if an API is available (has key and not rate limited)
-  isApiAvailable(apiName) {
-    const api = this.apis[apiName];
-    if (!api) return false;
-
-    const hasKey = !!(api.userKey || api.defaultKey);
-    const isRateLimited = api.rateLimited && Date.now() < api.rateLimitReset;
-
-    return hasKey && !isRateLimited && !api.disabled;
-  },
-
-  // Get the best available API
-  getBestApi() {
-    for (const apiName of this.apiOrder) {
-      if (this.isApiAvailable(apiName)) {
-        return apiName;
-      }
-    }
-    return null;
-  },
-
-  // Default batch prompt
+  // Default batch prompt (shared with the background worker)
   getBatchPrompt(tweets) {
-    return `Rate the sentiment/vibe of each tweet from -100 (very negative, toxic, outrage-bait) to +100 (very positive, uplifting, enlightening).
-
-Consider for each: Is it angry/divisive? Inflammatory? Spreading fear/hate? Or kind, helpful, educational, inspiring?
-
-Reply with ONLY the scores as a JSON array of integers, like: [25, -30, 50, -10, ...]
-One number per tweet, in the same order. No other text.
-
-Tweets to rate:
-${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
+    return XFPProviders.buildBatchPrompt(tweets, this.customPrompt);
   },
 
   // Queue a tweet for batch AI scoring
   queueForAIScoring(tweetId, text, callback) {
     if (!this.settings.useAI) return;
 
-    // Skip if no API available
-    const bestApi = this.getBestApi();
-    if (!bestApi) {
-      this.debug('No API available, skipping AI queue');
+    if (!this.hasAI()) {
+      this.debug('No AI provider available, skipping AI queue');
       return;
     }
 
@@ -136,7 +82,7 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
     if (cached && cached.source === 'ai') return;
 
     this.batchQueue.push({ tweetId, text, callback });
-    this.debug(`Queued tweet ${tweetId}. Queue: ${this.batchQueue.length}, API: ${bestApi}`);
+    this.debug(`Queued tweet ${tweetId}. Queue: ${this.batchQueue.length}, provider: ${this.provider.primaryName}`);
 
     // Start batch timer
     if (!this.batchTimeout) {
@@ -154,257 +100,127 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
     }
   },
 
+  // Ask the background worker to score a batch (primary, then fallback).
+  async requestScores(texts) {
+    try {
+      return await chrome.runtime.sendMessage({ type: 'XFP_SCORE_BATCH', texts });
+    } catch (error) {
+      // Extension reloaded or worker unavailable
+      return { scores: null, attempts: [], retryAfterMs: 30000 };
+    }
+  },
+
+  // Surface fresh provider failures to the page (toasts).
+  reportAttempts(result) {
+    const usingName = result && result.scores ? result.providerName : null;
+    for (const a of (result && result.attempts) || []) {
+      if (!a.fresh || a.state === 'working') continue;
+      if (a.state === 'rate_limited') {
+        if (this.onRateLimit) this.onRateLimit(a.name, a.waitSeconds || 60, usingName);
+      } else if (this.onApiError) {
+        const reason = a.state === 'auth_error' ? (a.httpStatus || 401)
+          : a.state === 'api_error' ? (a.httpStatus || 'api_error')
+          : a.state;
+        this.onApiError(a.name, reason, usingName);
+      }
+    }
+  },
+
   // Process the batch queue
   async processBatchQueue() {
     if (this.batchProcessing || this.batchQueue.length === 0) return;
     this.batchProcessing = true;
 
     while (this.batchQueue.length > 0) {
-      const apiName = this.getBestApi();
-
-      if (!apiName) {
-        // No API available - fall back to keywords for all queued
-        this.debug('No API available, using keywords for queued tweets');
-        console.warn('🌴 XFP: No AI API available. Using keyword scoring.');
-
-        while (this.batchQueue.length > 0) {
-          const { tweetId, text, callback } = this.batchQueue.shift();
-          const keywordScore = this.calculateKeywordScore(text);
-          this.scoreCache.set(tweetId, { score: keywordScore, source: 'keyword', timestamp: Date.now() });
-          if (callback) callback(keywordScore, 'keyword');
-        }
-        break;
-      }
-
-      const api = this.apis[apiName];
-
-      // Rate limiting wait
-      const now = Date.now();
-      const timeSince = now - api.lastRequest;
-      if (timeSince < api.minInterval) {
-        await new Promise(r => setTimeout(r, api.minInterval - timeSince));
-      }
-
-      // Grab a batch
       const batch = this.batchQueue.splice(0, this.batchSize);
-      api.lastRequest = Date.now();
 
-      this.debug(`Scoring ${batch.length} tweets with ${api.name}...`);
+      if (!this.hasAI()) {
+        this.scoreWithKeywords(batch);
+        continue;
+      }
 
-      try {
-        const scores = await this.scoreBatchWithApi(apiName, batch.map(b => b.text));
+      this.debug(`Scoring ${batch.length} tweets via background...`);
+      const result = await this.requestScores(batch.map(b => b.text));
+      this.reportAttempts(result);
 
-        if (scores && scores.length === batch.length) {
-          batch.forEach((item, i) => {
-            const aiScore = scores[i];
-            if (aiScore !== null) {
-              const keywordScore = this.calculateKeywordScore(item.text);
-              const finalScore = Math.round(aiScore * 0.85 + keywordScore * 0.15);
-              const clampedScore = Math.max(-100, Math.min(100, finalScore));
+      if (result && Array.isArray(result.scores) && result.scores.length === batch.length) {
+        batch.forEach((item, i) => {
+          const aiScore = result.scores[i];
+          if (aiScore === null || aiScore === undefined) return;
+          const keywordScore = this.calculateKeywordScore(item.text);
+          const finalScore = Math.round(aiScore * 0.85 + keywordScore * 0.15);
+          const clampedScore = Math.max(-100, Math.min(100, finalScore));
 
-              this.scoreCache.set(item.tweetId, {
-                score: clampedScore,
-                source: 'ai',
-                api: apiName,
-                timestamp: Date.now()
-              });
-
-              this.debug(`Tweet ${item.tweetId}: AI=${aiScore}, Final=${clampedScore} (${api.name})`);
-              if (item.callback) item.callback(clampedScore, 'ai');
-            }
+          this.scoreCache.set(item.tweetId, {
+            score: clampedScore,
+            source: 'ai',
+            api: result.provider,
+            timestamp: Date.now()
           });
-        } else {
-          // Do not retry the same failing provider forever.
-          if (!api.rateLimited) api.disabled = true;
-          this.debug(`${api.name} returned invalid scores, will retry with fallback`);
-          this.batchQueue.unshift(...batch);
-        }
-      } catch (error) {
-        console.error(`🌴 XFP: ${api.name} error:`, error);
-        api.disabled = true;
-        this.debug(`${api.name} error: ${error.message}`);
-        // Put items back to try another API
-        this.batchQueue.unshift(...batch);
+
+          this.debug(`Tweet ${item.tweetId}: AI=${aiScore}, Final=${clampedScore} (${result.providerName})`);
+          if (item.callback) item.callback(clampedScore, 'ai');
+        });
+      } else {
+        // Every configured provider failed: keywords for this batch, then pause.
+        this.aiPausedUntil = Date.now() + Math.min((result && result.retryAfterMs) || 30000, 5 * 60 * 1000);
+        console.warn('🌴 XFP: No AI provider available right now. Using keyword scoring.');
+        this.scoreWithKeywords(batch);
       }
     }
 
     this.batchProcessing = false;
   },
 
-  // Score batch with a specific API
-  async scoreBatchWithApi(apiName, texts) {
-    const api = this.apis[apiName];
-    const apiKey = this.getApiKey(apiName);
-
-    if (!apiKey || texts.length === 0) return null;
-
-    const prompt = this.customPrompt
-      ? `${this.customPrompt}\n\nRate each of these ${texts.length} tweets. Reply with ONLY a JSON array of ${texts.length} integers.\n\nTweets:\n${texts.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`
-      : this.getBatchPrompt(texts);
-
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000);
-      let response;
-      try {
-        response = await fetch(api.baseUrl, {
-          method: 'POST',
-          signal: controller.signal,
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: api.model,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0,
-            ...(apiName === 'groq'
-              ? { max_completion_tokens: 256, reasoning_effort: 'low', include_reasoning: false }
-              : { max_tokens: 200 })
-          })
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
-
-      // Update usage from headers (Groq-style)
-      const remaining = response.headers.get('x-ratelimit-remaining-requests');
-      const limit = response.headers.get('x-ratelimit-limit-requests');
-      if (remaining) api.usage.remaining = parseInt(remaining);
-      if (limit) api.usage.limit = parseInt(limit);
-
-      this.debug(`${api.name} usage: ${api.usage.remaining}/${api.usage.limit}`);
-
-      if (response.status === 429) {
-        const resetHeader = response.headers.get('x-ratelimit-reset-requests') ||
-                           response.headers.get('retry-after');
-        const waitTime = this.parseResetTime(resetHeader) || 60000;
-        const waitSeconds = Math.round(waitTime / 1000);
-
-        console.warn(`🌴 XFP: ${api.name} rate limited for ${waitSeconds}s. Switching to fallback.`);
-        this.debug(`${api.name} rate limited. Reset: ${waitTime}ms`);
-
-        api.rateLimited = true;
-        api.rateLimitReset = Date.now() + waitTime;
-        if (apiName === 'groq') this.reportGroqStatus('rate_limited', 429);
-
-        // Notify UI
-        if (this.onRateLimit) {
-          this.onRateLimit(api.name, waitSeconds);
-        }
-
-        return null;
-      }
-
-      if (!response.ok) {
-        console.warn(`🌴 XFP: ${api.name} error ${response.status}`);
-        api.disabled = true;
-        if (apiName === 'groq') {
-          this.reportGroqStatus(response.status === 401 || response.status === 403 ? 'auth_error' : 'api_error', response.status);
-        }
-        if (this.onApiError) this.onApiError(api.name, response.status);
-        return null;
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content?.trim();
-
-      this.debug(`${api.name} response: ${content}`);
-
-      const scores = this.parseScoresFromResponse(content, texts.length);
-      if (apiName === 'groq') this.reportGroqStatus(scores ? 'working' : 'invalid_response');
-      if (!scores && this.onApiError) this.onApiError(api.name, 'invalid_response');
-      api.rateLimited = false;
-      return scores;
-    } catch (error) {
-      console.error(`🌴 XFP: ${api.name} error:`, error);
-      api.disabled = true;
-      if (apiName === 'groq') this.reportGroqStatus('network_error');
-      if (this.onApiError) this.onApiError(api.name, 'network_error');
-      return null;
+  scoreWithKeywords(batch) {
+    for (const { tweetId, text, callback } of batch) {
+      const keywordScore = this.calculateKeywordScore(text);
+      this.scoreCache.set(tweetId, { score: keywordScore, source: 'keyword', timestamp: Date.now() });
+      if (callback) callback(keywordScore, 'keyword');
     }
   },
 
-  // Parse scores from API response
+  // Parse scores from a model response (kept for compatibility; see providers.js)
   parseScoresFromResponse(content, expectedCount) {
-    if (!content) return null;
-
-    try {
-      // Try to extract JSON array
-      const arrayMatch = content.match(/\[[\d\s,\-]+\]/);
-      if (arrayMatch) {
-        const scores = JSON.parse(arrayMatch[0]);
-        if (Array.isArray(scores) && scores.length === expectedCount) {
-          return scores.map(s => Math.max(-100, Math.min(100, Math.round(Number(s)))));
-        }
-      }
-    } catch (e) {
-      this.debug(`JSON parse failed: ${e.message}`);
-    }
-
-    // Fallback: extract numbers
-    const numbers = content.match(/-?\d+/g);
-    if (numbers && numbers.length === expectedCount) {
-      return numbers.map(n => Math.max(-100, Math.min(100, parseInt(n))));
-    }
-
-    return null;
+    return XFPProviders.parseScores(content, expectedCount);
   },
 
-  // Parse reset time from header
-  parseResetTime(resetHeader) {
-    if (!resetHeader) return 60000;
-
-    // Handle numeric seconds
-    const numericSec = parseInt(resetHeader);
-    if (!isNaN(numericSec) && numericSec < 1000) return numericSec * 1000;
-
-    // Handle "1m30s" format
-    let ms = 0;
-    const minMatch = resetHeader.match(/(\d+)m/);
-    const secMatch = resetHeader.match(/(\d+)s/);
-    if (minMatch) ms += parseInt(minMatch[1]) * 60000;
-    if (secMatch) ms += parseInt(secMatch[1]) * 1000;
-
-    return ms || 60000;
+  // Load provider configuration (primary, fallback, readiness) from storage
+  async loadProviderConfig() {
+    const config = await XFPProviders.loadConfig();
+    const primary = config.providers[config.primary];
+    this.customPrompt = config.customPrompt;
+    this.provider = {
+      primary: config.primary,
+      primaryName: XFPProviders.displayName(config.primary),
+      primaryModel: primary.model,
+      primaryConfigured: XFPProviders.isConfigured(primary),
+      fallback: config.fallback,
+      fallbackName: config.fallback ? XFPProviders.displayName(config.fallback) : null,
+      configured: XFPProviders.chain(config).length > 0
+    };
+    this.aiPausedUntil = 0;
+    return this.provider;
   },
 
-  // Load API keys from storage
+  // Backward-compatible name used by older content-script code
   async loadGroqApiKey() {
-    return new Promise((resolve) => {
-      chrome.storage.sync.get(['groqApiKey', 'togetherApiKey', 'customPrompt'], (result) => {
-        this.apis.groq.userKey = result.groqApiKey || null;
-        this.apis.together.userKey = result.togetherApiKey || null;
-        this.apis.groq.disabled = false;
-        this.apis.together.disabled = false;
-        this.customPrompt = result.customPrompt || null;
+    return this.loadProviderConfig();
+  },
 
-        resolve({
-          groqApiKey: this.getApiKey('groq'),
-          togetherApiKey: this.getApiKey('together'),
-          customPrompt: this.customPrompt
-        });
-      });
+  // Reload provider config whenever the popup (or another tab) changes it.
+  watchProviderConfig(onChange) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'sync') return;
+      if (!Object.keys(changes).some(key => XFPProviders.SYNC_KEYS.includes(key))) return;
+      this.loadProviderConfig().then(() => { if (onChange) onChange(this.provider); });
     });
   },
 
-  // Save Groq API key
-  async saveGroqApiKey(key) {
-    this.apis.groq.userKey = key || null;
-    this.apis.groq.disabled = false;
-    this.apis.groq.rateLimited = false;
-    await chrome.storage.local.remove('xfpGroqStatus');
-    return new Promise((resolve) => {
-      chrome.storage.sync.set({ groqApiKey: key }, resolve);
-    });
-  },
-
-  // Save Together API key
-  async saveTogetherApiKey(key) {
-    this.apis.together.userKey = key || null;
-    return new Promise((resolve) => {
-      chrome.storage.sync.set({ togetherApiKey: key }, resolve);
-    });
+  // Save the key for the active (primary) provider
+  async saveActiveProviderKey(key) {
+    await XFPProviders.saveProvider(this.provider.primary, { apiKey: key || '' });
+    return this.loadProviderConfig();
   },
 
   // Save custom prompt
@@ -413,21 +229,6 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
     return new Promise((resolve) => {
       chrome.storage.sync.set({ customPrompt: prompt }, resolve);
     });
-  },
-
-  // Current Groq key for content-script status displays
-  get groqApiKey() {
-    return this.getApiKey('groq');
-  },
-
-  // Get usage stats for UI
-  get groqUsage() {
-    return {
-      requestsRemaining: this.apis.groq.usage.remaining,
-      requestsLimit: this.apis.groq.usage.limit,
-      rateLimited: this.apis.groq.rateLimited,
-      lastUpdated: Date.now()
-    };
   },
 
   // Default prompt for single tweet (backward compat)
@@ -548,7 +349,7 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
     const keywordScore = this.calculateKeywordScore(text);
     this.scoreCache.set(tweetId, { score: keywordScore, source: 'keyword', timestamp: Date.now() });
 
-    if (this.settings.useAI && this.getBestApi()) {
+    if (this.settings.useAI && this.hasAI()) {
       this.queueForAIScoring(tweetId, text, onUpdate);
     }
 
@@ -601,22 +402,12 @@ ${tweets.map((t, i) => `${i + 1}. "${t.slice(0, 200)}"`).join('\n')}`;
     this.debug('Cache cleared');
   },
 
-  // Get API status for UI
+  // Provider summary for UI
   getApiStatus() {
     return {
-      groq: {
-        available: this.isApiAvailable('groq'),
-        hasKey: !!this.getApiKey('groq'),
-        rateLimited: this.apis.groq.rateLimited,
-        usage: this.apis.groq.usage
-      },
-      together: {
-        available: this.isApiAvailable('together'),
-        hasKey: !!this.getApiKey('together'),
-        rateLimited: this.apis.together.rateLimited,
-        usage: this.apis.together.usage
-      },
-      activeApi: this.getBestApi()
+      ...this.provider,
+      paused: Date.now() < this.aiPausedUntil,
+      activeApi: this.hasAI() ? this.provider.primary : null
     };
   }
 };
