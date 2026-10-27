@@ -52,8 +52,14 @@ fi
 # The runtime service account must be able to read the secrets.
 for secret in xfeed-openai-api-key xfeed-typesafe-api-key; do
   if [[ "$SECRETS" == *"$secret"* ]]; then
-    g secrets add-iam-policy-binding "$secret" \
-      --member="serviceAccount:$ACCOUNT" --role=roles/secretmanager.secretAccessor >/dev/null
+    # Skip the binding when the runtime account can already read the secret
+    # (e.g. a project-level secretAccessor grant); it may lack setIamPolicy.
+    if g secrets versions access latest --secret="$secret" >/dev/null 2>&1; then
+      echo "Runtime account can already read $secret"
+    else
+      g secrets add-iam-policy-binding "$secret" \
+        --member="serviceAccount:$ACCOUNT" --role=roles/secretmanager.secretAccessor >/dev/null
+    fi
   fi
 done
 
@@ -69,7 +75,7 @@ g run deploy "$SERVICE" \
   --memory=256Mi \
   --timeout=60 \
   --set-secrets="$SECRETS" \
-  --set-env-vars="XFEED_BACKENDS=${XFEED_BACKENDS:-jev,decisions,nano}"
+  --set-env-vars="^@^XFEED_BACKENDS=${XFEED_BACKENDS:-jev,decisions,nano}"
 
 URL="$(g run services describe "$SERVICE" --region="$REGION" --format='value(status.url)')"
 echo "Deployed: $URL"
