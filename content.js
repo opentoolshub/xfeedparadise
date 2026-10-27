@@ -111,6 +111,12 @@
 
   let lastApiErrorToast = 0;
   VibeFilter.onApiError = (apiName, reason, usingName) => {
+    // Built-in provider used up for today: one friendly notice (the worker
+    // reports it once, then backs off until the next UTC day).
+    if (reason === 'daily_limit' || reason === 'global_budget') {
+      showToast(XFPProviders.BUILTIN_LIMIT_NOTICE, 'info', 8000);
+      return;
+    }
     const now = Date.now();
     if (now - lastApiErrorToast < 30000) return;
     lastApiErrorToast = now;

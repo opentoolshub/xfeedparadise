@@ -192,6 +192,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!id) return;
     const def = P.PROVIDERS[id];
     const entry = providerConfig.providers[id];
+    // The built-in provider needs no key or model: hide those fields.
+    for (const el of [slot.keyLabel.parentElement, slot.key.parentElement, slot.model.parentElement]) {
+      if (el) el.style.display = def.noKey ? 'none' : '';
+    }
     slot.keyLabel.textContent = `${P.displayName(id)} API key${def.keyOptional ? ' (optional)' : ''}`;
     slot.keyLink.hidden = !def.keyUrl;
     if (def.keyUrl) slot.keyLink.href = def.keyUrl;
@@ -205,10 +209,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderPrivacy() {
-    const target = id => (P.PROVIDERS[id].customBaseUrl ? 'your custom endpoint' : P.displayName(id));
+    const target = id => (P.PROVIDERS[id].noKey ? 'the XFeed Paradise scoring server'
+      : P.PROVIDERS[id].customBaseUrl ? 'your custom endpoint' : P.displayName(id));
     const fallback = providerConfig.fallback;
+    const usesBuiltin = [providerConfig.primary, fallback].some(id => id && P.PROVIDERS[id].noKey);
+    const usesOwnKey = [providerConfig.primary, fallback].some(id => id && !P.PROVIDERS[id].noKey);
     $('providerPrivacy').textContent = `AI scoring sends post text to ${target(providerConfig.primary)}` +
-      `${fallback ? ` (or ${target(fallback)} as fallback)` : ''}, using your key. ` +
+      `${fallback ? ` (or ${target(fallback)} as fallback)` : ''}${usesOwnKey ? ', using your key' : ''}. ` +
+      (usesBuiltin ? 'The scoring server forwards it to OpenAI or TypeSafe for scoring and does not keep it. ' : '') +
       'Feed items are not uploaded to a community database.';
     // The fallback cannot be the same provider as the primary.
     for (const option of slots.fallback.select.options) {
@@ -404,8 +412,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (confirm('Are you sure you want to clear all stored tweet data?')) {
       // Clear IndexedDB via content script
       await sendToContentScript({ type: 'CLEAR_DATA' });
-      // Also clear local storage as backup
+      // Also clear local storage as backup (the install ID is settings, not data)
+      const kept = await chrome.storage.local.get(XFPProviders.INSTALL_ID_KEY);
       await chrome.storage.local.clear();
+      await chrome.storage.local.set(kept);
       updateStats();
       updateHiddenTweetsList();
     }
@@ -566,6 +576,9 @@ async function updateAIStatus() {
   warning.textContent = info.state === 'error' ? `${info.label}. ${next}` : '';
   warning.classList.toggle('show', settings.useAI && info.state === 'error');
 
+  const usesBuiltin = [config.primary, config.fallback].some(id => id && P.PROVIDERS[id].noKey);
+  updateBuiltinQuota(settings.useAI && usesBuiltin);
+
   if (!settings.useAI) {
     indicator.className = 'ai-indicator disabled';
     text.textContent = 'AI scoring disabled';
@@ -579,4 +592,29 @@ async function updateAIStatus() {
   } else {
     text.textContent = info.state === 'error' && fallbackUsable ? `${info.label} · ${next}` : info.label;
   }
+}
+
+// "Built-in AI: N posts left today", refreshed at most every 10 seconds.
+let builtinQuotaFetchedAt = 0;
+let builtinQuotaText = '';
+async function updateBuiltinQuota(show) {
+  const el = document.getElementById('builtinQuota');
+  if (!el) return;
+  if (!show) {
+    el.hidden = true;
+    return;
+  }
+  if (Date.now() - builtinQuotaFetchedAt > 10000) {
+    builtinQuotaFetchedAt = Date.now();
+    try {
+      const status = await chrome.runtime.sendMessage({ type: 'XFP_BUILTIN_STATUS' });
+      builtinQuotaText = status && Number.isFinite(status.remaining)
+        ? `Built-in AI: ${status.remaining.toLocaleString()} post${status.remaining === 1 ? '' : 's'} left today`
+        : '';
+    } catch (error) {
+      builtinQuotaText = '';
+    }
+  }
+  el.textContent = builtinQuotaText;
+  el.hidden = !builtinQuotaText;
 }

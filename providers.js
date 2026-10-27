@@ -8,6 +8,10 @@
 (function (root) {
   'use strict';
 
+  // Built-in scoring service (server/ in this repo). Free, with a daily cap per install.
+  const XFEED_SCORE_URL = 'https://xfeed-score-874749606899.us-central1.run.app';
+  const BUILTIN_LIMIT_NOTICE = 'Free AI limit reached for today — add your own key in Settings for unlimited scoring';
+
   const SAMPLE_TEXT = 'Thank you all for helping me learn something new today. Grateful for this community!';
 
   // Rubric for TypeSafe Jev, ordered from the low end of the scale to the high end.
@@ -20,8 +24,24 @@
   ];
   const JEV_INSTRUCTIONS = 'How uplifting versus outrage-inducing is this social media post?';
 
-  // kind: 'openai' (chat completions), 'anthropic' (Messages API), 'jev' (System One score)
+  // kind: 'openai' (chat completions), 'anthropic' (Messages API), 'jev' (System One score),
+  // 'builtin' (XFeed Paradise scoring service, no key)
   const PROVIDERS = {
+    builtin: {
+      id: 'builtin',
+      name: 'Built-in (free, daily limit)',
+      shortName: 'Built-in AI',
+      kind: 'builtin',
+      baseUrl: XFEED_SCORE_URL,
+      defaultModel: 'built-in',
+      keyUrl: null,
+      keyHint: 'Free AI scoring, no key needed, up to a daily limit. Add your own key with another provider for unlimited scoring. The custom prompt is not used.',
+      noKey: true,
+      requiredPermission: true, // listed in manifest host_permissions
+      origin: `${XFEED_SCORE_URL}/*`,
+      minInterval: 1000, // the service allows 60 requests/minute per install
+      maxChars: 400
+    },
     groq: {
       id: 'groq',
       name: 'Groq',
@@ -133,10 +153,14 @@
     }
   };
 
-  const ORDER = ['groq', 'openai', 'anthropic', 'gemini', 'openrouter', 'together', 'jev', 'custom'];
+  const ORDER = ['builtin', 'groq', 'openai', 'anthropic', 'gemini', 'openrouter', 'together', 'jev', 'custom'];
 
   const SYNC_KEYS = ['aiProvider', 'fallbackProvider', 'providerOptions', 'customPrompt']
-    .concat(ORDER.map(keyName));
+    .concat(ORDER.filter(id => !PROVIDERS[id].noKey).map(keyName));
+
+  const INSTALL_ID_KEY = 'xfpInstallId';
+  const BUILTIN_BLOCK_KEY = 'xfpBuiltinBlock';
+  const DEFAULTS_VERSION_KEY = 'xfpDefaultsVersion';
 
   // Storage name for each provider's key. Groq and Together keep their v1.3.2 names.
   function keyName(id) {
@@ -172,7 +196,9 @@
         baseUrl: (def.customBaseUrl ? (opt.baseUrl || '') : def.baseUrl).trim()
       };
     }
-    const primary = PROVIDERS[stored && stored.aiProvider] ? stored.aiProvider : 'groq';
+    // No saved choice: v1.3.x Groq users keep Groq; everyone else starts on the built-in provider.
+    const primary = PROVIDERS[stored && stored.aiProvider] ? stored.aiProvider
+      : providers.groq.apiKey ? 'groq' : 'builtin';
     let fallback = PROVIDERS[stored && stored.fallbackProvider] ? stored.fallbackProvider : null;
     if (fallback === primary) fallback = null;
     return {
@@ -192,6 +218,7 @@
   function configProblem(entry) {
     if (!entry) return 'no_key';
     const def = PROVIDERS[entry.id];
+    if (def.noKey) return null;
     if (def.customBaseUrl) {
       if (!entry.baseUrl) return 'no_base_url';
       if (!permissionOrigin(entry.id, entry.baseUrl)) return 'bad_base_url';
@@ -252,9 +279,48 @@
 
   async function saveSelection({ primary, fallback }) {
     const updates = {};
-    if (primary !== undefined) updates.aiProvider = PROVIDERS[primary] ? primary : 'groq';
+    if (primary !== undefined) updates.aiProvider = PROVIDERS[primary] ? primary : 'builtin';
     if (fallback !== undefined) updates.fallbackProvider = PROVIDERS[fallback] ? fallback : '';
     await chromeApi().storage.sync.set(updates);
+  }
+
+  // v1.4.0: installs with no working provider of their own switch to the
+  // built-in provider once. Anyone with a configured key keeps their choice,
+  // and later selections stick (the migration runs only once).
+  async function applyBuiltinDefault() {
+    const chrome = chromeApi();
+    const done = await chrome.storage.sync.get(DEFAULTS_VERSION_KEY);
+    if (done[DEFAULTS_VERSION_KEY] >= 140) return false;
+    const config = configFromStorage(await chrome.storage.sync.get(SYNC_KEYS));
+    const hasOwn = ORDER.some(id => !PROVIDERS[id].noKey && isConfigured(config.providers[id]));
+    const updates = { [DEFAULTS_VERSION_KEY]: 140 };
+    let switched = false;
+    if (!hasOwn && config.primary !== 'builtin') {
+      updates.aiProvider = 'builtin';
+      if (config.fallback === 'builtin') updates.fallbackProvider = '';
+      switched = true;
+    }
+    await chrome.storage.sync.set(updates);
+    return switched;
+  }
+
+  function randomId() {
+    const c = root.crypto;
+    if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+    const hex = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16));
+    hex[12] = '4';
+    return `${hex.slice(0, 8).join('')}-${hex.slice(8, 12).join('')}-${hex.slice(12, 16).join('')}-${hex.slice(16, 20).join('')}-${hex.slice(20).join('')}`;
+  }
+
+  // Random per-install identifier for the built-in provider's daily cap.
+  // Stored only in this browser; it contains no account or profile data.
+  async function getInstallId() {
+    const local = chromeApi().storage.local;
+    const stored = await local.get(INSTALL_ID_KEY);
+    if (typeof stored[INSTALL_ID_KEY] === 'string' && stored[INSTALL_ID_KEY]) return stored[INSTALL_ID_KEY];
+    const id = randomId();
+    await local.set({ [INSTALL_ID_KEY]: id });
+    return id;
   }
 
   // ---------------------------------------------------------------- status
@@ -281,6 +347,18 @@
   function describeStatus(entry, status) {
     const name = entry ? displayName(entry.id) : 'AI provider';
     const problem = configProblem(entry);
+    if (entry && PROVIDERS[entry.id] && PROVIDERS[entry.id].noKey) {
+      switch (status && status.state) {
+        case 'working': return { state: 'ready', label: `${name} scoring is working` };
+        case 'daily_limit':
+        case 'global_budget': return { state: 'error', label: BUILTIN_LIMIT_NOTICE };
+        case 'rate_limited': return { state: 'error', label: `${name} is busy; retrying shortly` };
+        case 'network_error': return { state: 'error', label: `Cannot reach ${name}` };
+        case 'invalid_response':
+        case 'api_error': return { state: 'error', label: `${name} is temporarily unavailable` };
+        default: return { state: 'ready', label: `${name} is on (free, daily limit)` };
+      }
+    }
     if (problem === 'no_key') return { state: 'disabled', label: `Add your ${name} key to enable AI scoring` };
     if (problem === 'no_base_url') return { state: 'disabled', label: 'Add a base URL to enable the custom endpoint' };
     if (problem === 'bad_base_url') return { state: 'error', label: 'Base URL must use https, or http://localhost' };
@@ -573,7 +651,44 @@ ${list}`;
     return { ok: true, scores, usage, retried: [] };
   }
 
-  const ADAPTERS = { openai: callOpenAICompatible, anthropic: callAnthropic, jev: callJev };
+  function nextUtcMidnightMs(now = Date.now()) {
+    const d = new Date(now);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+  }
+
+  // Milliseconds until the server's reset time, or until the next UTC day.
+  function untilReset(resetsAt) {
+    const parsed = Date.parse(resetsAt || '');
+    const target = Number.isFinite(parsed) && parsed > Date.now() ? parsed : nextUtcMidnightMs();
+    return Math.max(60000, target - Date.now());
+  }
+
+  async function callBuiltin(entry, texts, _prompt, fetchImpl) {
+    const def = PROVIDERS[entry.id];
+    const installId = await getInstallId();
+    const body = { installId, texts: texts.map(t => String(t).slice(0, def.maxChars)) };
+    const response = await postJson(fetchImpl, `${entry.baseUrl}/v1/score`, {}, body, 20000);
+    const data = await readJson(response);
+    const error = data && data.error;
+    if (error === 'daily_limit' || error === 'global_budget') {
+      return { ok: false, state: error, httpStatus: response.status, retryAfterMs: untilReset(data.resetsAt) };
+    }
+    if (error === 'rate_limited' || response.status === 429) {
+      const seconds = Number(data && data.retryAfterSeconds);
+      return { ok: false, state: 'rate_limited', httpStatus: response.status, retryAfterMs: (Number.isFinite(seconds) && seconds > 0 ? seconds : 60) * 1000 };
+    }
+    if (!response.ok) return { ok: false, state: 'api_error', httpStatus: response.status };
+    const scores = data && Array.isArray(data.scores) && data.scores.length === texts.length
+      ? data.scores.map(s => (s === null || s === undefined || !Number.isFinite(Number(s)) ? null : clampScore(s)))
+      : null;
+    if (!scores || scores.every(s => s === null)) {
+      return { ok: false, state: 'invalid_response', httpStatus: response.status };
+    }
+    const remaining = Number.isFinite(Number(data.remaining)) ? Number(data.remaining) : null;
+    return { ok: true, scores, usage: { requestsRemaining: null, requestsLimit: null, tokensRemaining: null, postsRemaining: remaining }, retried: [] };
+  }
+
+  const ADAPTERS = { openai: callOpenAICompatible, anthropic: callAnthropic, jev: callJev, builtin: callBuiltin };
 
   // One scoring call to one provider. Never throws.
   async function callProvider(entry, texts, options = {}) {
@@ -631,9 +746,30 @@ ${list}`;
   }
 
   // Score with one provider, applying throttling, permission checks, status and cooldowns.
+  // Built-in daily-limit back-off survives service-worker restarts.
+  async function loadBuiltinBlock() {
+    const stored = await chromeApi().storage.local.get(BUILTIN_BLOCK_KEY);
+    const block = stored[BUILTIN_BLOCK_KEY];
+    return block && block.until > Date.now() ? block : null;
+  }
+
+  async function setBuiltinBlock(block) {
+    if (block) await chromeApi().storage.local.set({ [BUILTIN_BLOCK_KEY]: block });
+    else await chromeApi().storage.local.remove(BUILTIN_BLOCK_KEY);
+  }
+
+  const LIMIT_STATES = ['daily_limit', 'global_budget'];
+
   async function attempt(entry, texts, options = {}) {
     const id = entry.id;
     const state = rt(id);
+    if (PROVIDERS[id].noKey && !options.force && !(state.blockedUntil > Date.now())) {
+      const block = await loadBuiltinBlock();
+      if (block) {
+        state.blockedUntil = block.until;
+        state.blockedState = block.state;
+      }
+    }
     if (!options.force && state.blockedUntil > Date.now()) {
       return { ok: false, state: state.blockedState, skipped: true, retryAfterMs: state.blockedUntil - Date.now() };
     }
@@ -649,12 +785,15 @@ ${list}`;
     if (result.ok) {
       state.blockedUntil = 0;
       state.blockedState = null;
+      if (PROVIDERS[id].noKey) await setBuiltinBlock(null);
       await recordStatus(id, 'working', null);
       return result;
     }
-    const cooldown = result.state === 'rate_limited' ? (result.retryAfterMs || 60000) : (COOLDOWN[result.state] || 30000);
+    const cooldown = (result.state === 'rate_limited' || LIMIT_STATES.includes(result.state))
+      ? (result.retryAfterMs || 60000) : (COOLDOWN[result.state] || 30000);
     state.blockedUntil = Date.now() + cooldown;
     state.blockedState = result.state;
+    if (LIMIT_STATES.includes(result.state)) await setBuiltinBlock({ state: result.state, until: state.blockedUntil });
     await recordStatus(id, result.state, result.httpStatus || null);
     return result;
   }
@@ -697,11 +836,38 @@ ${list}`;
     return { state: result.ok ? 'working' : result.state, httpStatus: result.httpStatus || null };
   }
 
+  // Remaining built-in posts today, from the service's status route. A status
+  // that says scoring is available again lifts a stored daily-limit back-off.
+  async function builtinStatus(options = {}) {
+    const fetchImpl = options.fetch || root.fetch.bind(root);
+    const installId = await getInstallId();
+    try {
+      const response = await fetchImpl(`${PROVIDERS.builtin.baseUrl}/v1/status?installId=${encodeURIComponent(installId)}`);
+      const data = await readJson(response);
+      if (!response.ok || !data || !Number.isFinite(Number(data.remaining))) return { state: 'api_error', httpStatus: response.status };
+      const remaining = Number(data.remaining);
+      if (data.state === 'ok' && remaining > 0) {
+        if (await loadBuiltinBlock()) {
+          await setBuiltinBlock(null);
+          resetRuntime('builtin');
+          await chromeApi().storage.local.remove(statusKey('builtin'));
+        }
+      } else if (LIMIT_STATES.includes(data.state)) {
+        await setBuiltinBlock({ state: data.state, until: Date.now() + untilReset(data.resetsAt) });
+      }
+      return { state: data.state || 'ok', remaining, limit: Number(data.limit) || null, resetsAt: data.resetsAt || null };
+    } catch (error) {
+      return { state: 'network_error' };
+    }
+  }
+
   function usageFor(id) {
     return (runtime[id] && runtime[id].usage) || null;
   }
 
   root.XFPProviders = {
+    XFEED_SCORE_URL,
+    BUILTIN_LIMIT_NOTICE,
     PROVIDERS,
     ORDER,
     SYNC_KEYS,
@@ -729,6 +895,11 @@ ${list}`;
     scoreBatch,
     testProvider,
     resetRuntime,
-    usageFor
+    usageFor,
+    getInstallId,
+    applyBuiltinDefault,
+    builtinStatus,
+    INSTALL_ID_KEY,
+    BUILTIN_BLOCK_KEY
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

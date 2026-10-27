@@ -2,6 +2,7 @@
 // All AI provider HTTP calls happen here (extension origin, not page CORS).
 // Content scripts send batches of post text; the worker tries the primary
 // provider, then the optional fallback. Callers use keywords if both fail.
+// The default provider is the built-in scoring service (no key, daily cap).
 
 import './providers.js';
 
@@ -68,6 +69,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       return true;
     }
+    case 'XFP_BUILTIN_STATUS': {
+      Providers.builtinStatus()
+        .then(sendResponse)
+        .catch(() => sendResponse({ state: 'network_error' }));
+      return true;
+    }
     case 'GET_AI_STATUS_BG': {
       aiStatus().then(sendResponse);
       return true;
@@ -101,6 +108,9 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
   // v1.3.2 kept one Groq status record; providers now have their own.
   chrome.storage.local.remove('xfpGroqStatus');
+  // v1.4.0: installs without a key of their own move to the built-in provider (once).
+  Providers.applyBuiltinDefault().then(switched => { if (switched) configCache = null; }).catch(() => {});
+  Providers.getInstallId().catch(() => {});
 });
 
 // Badge update for stats

@@ -478,3 +478,181 @@ test('popup asks for a key for a newly selected provider', async () => {
   assert.equal(ui.indicator.className, 'ai-indicator disabled');
   assert.match(ui.text.textContent, /Anthropic key/);
 });
+
+// ------------------------------------------------------------------ built-in provider (v1.4.0)
+
+const BUILTIN_URL = 'https://xfeed-score-874749606899.us-central1.run.app';
+
+test('built-in provider is the default for fresh installs and needs a required host permission', async () => {
+  const ctx = makeContext();
+  const P = ctx.XFPProviders;
+  assert.equal(P.XFEED_SCORE_URL, BUILTIN_URL);
+  assert.equal(P.ORDER[0], 'builtin');
+  assert.equal(P.PROVIDERS.builtin.name, 'Built-in (free, daily limit)');
+  const config = await P.loadConfig();
+  assert.equal(config.primary, 'builtin');
+  assert.equal(P.configProblem(config.providers.builtin), null);
+  assert.deepEqual([...P.chain(config).map(e => e.id)], ['builtin']);
+  assert.ok(!P.SYNC_KEYS.includes('builtinApiKey'));
+  const manifest = JSON.parse(read('manifest.json'));
+  assert.equal(manifest.version, '1.4.0');
+  assert.ok(manifest.host_permissions.includes(`${BUILTIN_URL}/*`));
+  assert.equal(P.PROVIDERS.builtin.origin, `${BUILTIN_URL}/*`);
+});
+
+test('upgrade moves installs without a key to built-in once; users with a key keep theirs', async () => {
+  // v1.3.3 user who picked Groq but never added a key.
+  let ctx = makeContext({ sync: { aiProvider: 'groq' } });
+  assert.equal(await ctx.XFPProviders.applyBuiltinDefault(), true);
+  assert.equal(ctx.chrome.storage.sync.data.aiProvider, 'builtin');
+  // The migration runs once: a later explicit choice sticks.
+  await ctx.XFPProviders.saveSelection({ primary: 'groq' });
+  assert.equal(await ctx.XFPProviders.applyBuiltinDefault(), false);
+  assert.equal((await ctx.XFPProviders.loadConfig()).primary, 'groq');
+
+  ctx = makeContext({ sync: { aiProvider: 'openai', openaiApiKey: 'sk-o', fallbackProvider: 'groq' } });
+  assert.equal(await ctx.XFPProviders.applyBuiltinDefault(), false);
+  assert.equal(ctx.chrome.storage.sync.data.aiProvider, 'openai');
+
+  // Legacy Groq key with no saved provider keeps Groq.
+  ctx = makeContext({ sync: { groqApiKey: 'gsk_old' } });
+  assert.equal(await ctx.XFPProviders.applyBuiltinDefault(), false);
+  assert.equal((await ctx.XFPProviders.loadConfig()).primary, 'groq');
+
+  // Built-in can be the fallback for someone with their own key.
+  ctx = makeContext({ sync: { aiProvider: 'groq', groqApiKey: 'gsk_x', fallbackProvider: 'builtin' } });
+  const config = await ctx.XFPProviders.loadConfig();
+  assert.deepEqual([...ctx.XFPProviders.chain(config).map(e => e.id)], ['groq', 'builtin']);
+});
+
+test('built-in adapter sends a stable install ID and truncated posts, no key', async () => {
+  const { calls, fetchImpl } = recorder(call => jsonResponse(200, {
+    scores: call.body.texts.map((_, i) => (i === 2 ? null : 50 - i * 100)), remaining: 997
+  }));
+  const ctx = makeContext({ fetchImpl, extra: { crypto: { randomUUID: () => '11111111-2222-4333-8444-555555555555' } } });
+  const P = ctx.XFPProviders;
+  const result = await P.scoreBatch(['kind', 'x'.repeat(1000), 'beyond the cap']);
+  assert.deepEqual([...result.scores], [50, -50, null]);
+  assert.equal(result.provider, 'builtin');
+  assert.equal(calls[0].url, `${BUILTIN_URL}/v1/score`);
+  assert.equal(calls[0].headers.Authorization, undefined);
+  assert.equal(calls[0].body.installId, '11111111-2222-4333-8444-555555555555');
+  assert.equal(calls[0].body.texts[1].length, 400);
+  assert.equal(status(ctx, 'builtin').state, 'working');
+  assert.equal(P.usageFor('builtin').postsRemaining, 997);
+  P.resetRuntime();
+  await P.scoreBatch(['again']);
+  assert.equal(calls[1].body.installId, calls[0].body.installId);
+  assert.equal(ctx.chrome.storage.local.data.xfpInstallId, calls[0].body.installId);
+});
+
+test('install ID falls back to a random v4 UUID without crypto.randomUUID', async () => {
+  const id = await makeContext().XFPProviders.getInstallId();
+  assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+});
+
+test('daily_limit uses keywords, reports once and backs off until the reset (even after a worker restart)', async () => {
+  const resetsAt = new Date(Date.now() + 5 * 3600 * 1000).toISOString();
+  const { calls, fetchImpl } = recorder(() => jsonResponse(429, { error: 'daily_limit', resetsAt }));
+  const ctx = makeContext({ fetchImpl });
+  const P = ctx.XFPProviders;
+  const first = await P.scoreBatch(['a']);
+  assert.equal(first.scores, null);
+  assert.equal(first.attempts[0].state, 'daily_limit');
+  assert.equal(first.attempts[0].fresh, true);
+  assert.ok(first.retryAfterMs > 4 * 3600 * 1000);
+  const block = ctx.chrome.storage.local.data.xfpBuiltinBlock;
+  assert.equal(block.state, 'daily_limit');
+  assert.ok(Math.abs(block.until - Date.parse(resetsAt)) < 5000);
+  const second = await P.scoreBatch(['b']);
+  assert.equal(second.attempts[0].fresh, false);
+  assert.equal(calls.length, 1);
+  // A restarted worker (fresh runtime, same storage) still does not call the server.
+  P.resetRuntime();
+  const third = await P.scoreBatch(['c']);
+  assert.equal(third.attempts[0].state, 'daily_limit');
+  assert.equal(third.attempts[0].fresh, false);
+  assert.equal(calls.length, 1);
+  const label = P.describeStatus((await P.loadConfig()).providers.builtin, status(ctx, 'builtin')).label;
+  assert.equal(label, 'Free AI limit reached for today — add your own key in Settings for unlimited scoring');
+});
+
+test('global_budget on built-in fails over to the fallback provider', async () => {
+  const { calls, fetchImpl } = recorder(call => (call.url.startsWith(BUILTIN_URL)
+    ? jsonResponse(503, { error: 'global_budget' })
+    : jsonResponse(200, chat('[33]'))));
+  const ctx = makeContext({ fetchImpl, sync: { aiProvider: 'builtin', fallbackProvider: 'groq', groqApiKey: 'gsk_x' } });
+  const result = await ctx.XFPProviders.scoreBatch(['hello']);
+  assert.deepEqual([...result.scores], [33]);
+  assert.equal(result.provider, 'groq');
+  assert.equal(result.attempts[0].state, 'global_budget');
+  assert.equal(calls.length, 2);
+  // Without a reset time, the back-off lasts until the next UTC day.
+  const until = ctx.chrome.storage.local.data.xfpBuiltinBlock.until;
+  const d = new Date();
+  assert.equal(until >= Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1) - 1000, true);
+});
+
+test('built-in network error or server error falls back to keywords with a short cooldown', async () => {
+  let ctx = makeContext({ fetchImpl: async () => { throw new TypeError('Failed to fetch'); } });
+  let result = await ctx.XFPProviders.scoreBatch(['x']);
+  assert.equal(result.scores, null);
+  assert.equal(result.attempts[0].state, 'network_error');
+  assert.ok(result.retryAfterMs <= 60000);
+  assert.equal(ctx.chrome.storage.local.data.xfpBuiltinBlock, undefined);
+
+  ctx = makeContext({ fetchImpl: async () => jsonResponse(502, { error: 'backend_error' }) });
+  result = await ctx.XFPProviders.scoreBatch(['x']);
+  assert.equal(result.attempts[0].state, 'api_error');
+  assert.equal(status(ctx, 'builtin').httpStatus, 502);
+
+  ctx = makeContext({ fetchImpl: async () => jsonResponse(429, { error: 'rate_limited', retryAfterSeconds: 7 }) });
+  result = await ctx.XFPProviders.scoreBatch(['x']);
+  assert.equal(result.attempts[0].state, 'rate_limited');
+  assert.equal(result.attempts[0].waitSeconds, 7);
+});
+
+test('built-in status reports posts left and lifts a stale back-off', async () => {
+  const replies = [
+    { remaining: 0, limit: 1000, state: 'daily_limit', resetsAt: new Date(Date.now() + 3600000).toISOString() },
+    { remaining: 1000, limit: 1000, state: 'ok', resetsAt: new Date(Date.now() + 3600000).toISOString() }
+  ];
+  const urls = [];
+  const ctx = makeContext({ fetchImpl: async url => { urls.push(url); return jsonResponse(200, replies.shift()); } });
+  const P = ctx.XFPProviders;
+  const limited = await P.builtinStatus();
+  assert.equal(limited.remaining, 0);
+  assert.equal(ctx.chrome.storage.local.data.xfpBuiltinBlock.state, 'daily_limit');
+  assert.match(urls[0], new RegExp(`^${BUILTIN_URL}/v1/status\\?installId=[0-9a-f-]{36}$`));
+  const ok = await P.builtinStatus();
+  assert.equal(ok.remaining, 1000);
+  assert.equal(ctx.chrome.storage.local.data.xfpBuiltinBlock, undefined);
+});
+
+test('content scripts show the one-time free-limit notice', async () => {
+  const filter = loadFilter(async message => ({
+    scores: null,
+    attempts: [{ provider: 'builtin', name: 'Built-in AI', state: 'daily_limit', fresh: true }],
+    retryAfterMs: 3600000
+  }));
+  await filter.loadProviderConfig();
+  const errors = [];
+  filter.onApiError = (...args) => errors.push(args);
+  filter.batchQueue.push({ tweetId: '1', text: 'hi', callback() {} });
+  await filter.processBatchQueue();
+  assert.deepEqual(errors, [['Built-in AI', 'daily_limit', null]]);
+  for (const file of ['content.js', 'content-googlenews.js']) {
+    assert.match(read(file), /reason === 'daily_limit' \|\| reason === 'global_budget'[\s\S]{0,80}BUILTIN_LIMIT_NOTICE/, file);
+  }
+});
+
+test('popup shows built-in status without asking for a key', async () => {
+  const ui = popupContext({ sync: {} });
+  await ui.ctx.updateAIStatus();
+  assert.equal(ui.indicator.className, 'ai-indicator ready');
+  assert.match(ui.text.textContent, /Built-in AI is on/);
+  assert.doesNotMatch(ui.keyStatus.textContent, /key/i);
+  const limited = popupContext({ sync: {}, local: { xfpStatus_builtin: { state: 'daily_limit', checkedAt: Date.now() } } });
+  await limited.ctx.updateAIStatus();
+  assert.match(limited.warning.textContent, /^Free AI limit reached for today — add your own key in Settings/);
+});
