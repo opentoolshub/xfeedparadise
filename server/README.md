@@ -44,9 +44,9 @@ negative → neutral → pleasant → constructive → uplifting); the expected 
 | `XFEED_TRUST_PROXY` | on | use the rightmost `X-Forwarded-For` entry as the client IP (set `0` to use the socket address) |
 
 Counters live in memory. The service runs with `--max-instances=1` so they
-are authoritative, but **they reset when the instance restarts** (deploys,
-scale-to-zero). That is acceptable for v1; the global spend cap is the
-backstop.
+are authoritative, and `--min-instances=1` so they (including the global
+spend cap) are not reset by scale-to-zero. They still reset on deploys and
+platform restarts; that is acceptable for v1.
 
 ## Privacy
 

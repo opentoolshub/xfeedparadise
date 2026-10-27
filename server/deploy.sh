@@ -63,7 +63,7 @@ g run deploy "$SERVICE" \
   --service-account="$ACCOUNT" \
   --allow-unauthenticated \
   --max-instances=1 \
-  --min-instances=0 \
+  --min-instances=1 \
   --concurrency=80 \
   --cpu=1 \
   --memory=256Mi \
