@@ -12,7 +12,11 @@ Safari-flavoured manifest:
 Xcode runs this from a build phase of each extension target, writing straight
 into the .appex resources, so the Xcode project never lists extension files.
 
-usage: sync-extension.py [--root REPO_ROOT] --out DIR
+Smoke testing: --extra-matches (or the XFP_EXTRA_MATCHES build setting) adds
+match patterns to the x.com content script so a local fixture page such as
+safari/fixtures/x-timeline.html gets the extension. Never use it for releases.
+
+usage: sync-extension.py [--root REPO_ROOT] --out DIR [--extra-matches "PATTERN ..."]
 """
 import argparse
 import json
@@ -93,6 +97,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", default=os.path.normpath(os.path.join(here, "..", "..")))
     parser.add_argument("--out", required=True)
+    parser.add_argument("--extra-matches", default=os.environ.get("XFP_EXTRA_MATCHES", ""),
+                        help="space-separated match patterns added to the x.com content script (testing only)")
     args = parser.parse_args()
 
     root = os.path.abspath(args.root)
@@ -120,6 +126,15 @@ def main():
 
     safari = dict(manifest)
     safari["background"] = {"service_worker": worker}
+    extra = args.extra_matches.split()
+    if extra:
+        if os.environ.get("CONFIGURATION") == "Release":
+            fail("--extra-matches is for Debug smoke tests only")
+        scripts = [dict(script) for script in safari["content_scripts"]]
+        x_script = next(s for s in scripts if "https://x.com/*" in s.get("matches", []))
+        x_script["matches"] = x_script["matches"] + extra
+        safari["content_scripts"] = scripts
+        print("sync-extension: WARNING test build, x.com content script also matches: " + " ".join(extra))
     with open(os.path.join(args.out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(safari, handle, indent=2)
         handle.write("\n")
