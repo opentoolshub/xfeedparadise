@@ -39,6 +39,20 @@
   .btn-ghost { border: 1px solid var(--border); color: var(--text); }
   .btn-ghost:hover { border-color: var(--muted); }
   .meta { color: var(--muted); font-size: 13px; margin-top: 12px; }
+  .vibe-preview { display: grid; grid-template-columns: 1fr 288px; gap: 28px; align-items: center;
+    margin: 28px 0 0; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .vibe-preview h2 { margin: 0 0 10px; }
+  .vibe-preview p { margin: 0; color: var(--muted); }
+  /* Show the actual v1.3.3 popup controls at readable size. The original 1280 × 1629
+     capture has the open settings controls at x=16, y=188, width=288, height=290. */
+  .vibe-controls { position: relative; width: 100%; max-width: 288px; aspect-ratio: 288 / 290;
+    overflow: hidden; border-radius: 12px; }
+  .vibe-controls img { position: absolute; width: 444.444444%; max-width: none; height: auto;
+    left: -5.555556%; top: -64.827586%; }
+  @media (max-width: 680px) {
+    .vibe-preview { grid-template-columns: 1fr; gap: 20px; padding: 20px; }
+    .vibe-controls { grid-row: 1; justify-self: center; }
+  }
   .shot { margin: 32px 0 8px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .shot img { display: block; width: 100%; height: auto; }
   section { padding: 36px 0; border-top: 1px solid var(--border); }
@@ -91,7 +105,16 @@
     </div>
     <div class="meta">Desktop Chrome, Brave, Edge, Arc and other Chromium browsers · 80 KB · No account needed</div>
     <div class="note mobile-only" style="margin-top:14px"><strong>On your phone?</strong> Extensions install on a computer. Open this page on your laptop to set it up.</div>
-    <div class="shot"><img src="assets/screenshot-main.png" alt="X feed with XFeed Paradise vibe scores shown on posts"></div>
+    <figure class="vibe-preview">
+      <figcaption>
+        <h2>Set the vibe of your feed.</h2>
+        <p>Move the vibe slider to choose your threshold. Posts below it are hidden, dimmed, or collapsed — you decide.</p>
+      </figcaption>
+      <div class="vibe-controls">
+        <img src="assets/screenshot-vibe-controls.png" width="1280" height="1629" alt="XFeed Paradise settings with filtering active, Hide, Dim and Collapse modes, and the Vibe Threshold slider set to 0" fetchpriority="high">
+      </div>
+    </figure>
+    <div class="shot"><img src="assets/screenshot-main.png" width="1600" height="1014" alt="X feed with XFeed Paradise vibe scores shown on posts" loading="lazy"></div>
   </div>
 
   <section>
