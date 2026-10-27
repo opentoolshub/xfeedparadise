@@ -1,0 +1,8 @@
+node_modules
+test
+dev
+oidc
+*.md
+*.sh
+.gcloudignore
+.dockerignore

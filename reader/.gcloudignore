@@ -1,0 +1,6 @@
+.gcloudignore
+node_modules/
+test/
+dev/
+oidc/
+*.sh
