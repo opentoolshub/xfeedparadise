@@ -1,44 +1,84 @@
 // XFeed Paradise - Background Service Worker
-// Note: Local Transformers.js AI is disabled due to Chrome extension worker limitations
-// AI scoring is handled via Groq API in the content script
+// All AI provider HTTP calls happen here (extension origin, not page CORS).
+// Content scripts send batches of post text; the worker tries the primary
+// provider, then the optional fallback. Callers use keywords if both fail.
 
-// Track Groq API status
-let groqApiKeySet = false;
+import './providers.js';
 
-// Check if Groq API key is configured
-async function checkGroqStatus() {
-  const result = await chrome.storage.sync.get('groqApiKey');
-  groqApiKeySet = !!(result.groqApiKey && result.groqApiKey.startsWith('gsk_'));
-  return groqApiKeySet;
+const Providers = globalThis.XFPProviders;
+
+let configCache = null;
+
+async function getConfig() {
+  if (!configCache) configCache = await Providers.loadConfig();
+  return configCache;
 }
 
-// Handle messages from content scripts and popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'GET_AI_STATUS_BG') {
-    // Return Groq-based AI status
-    checkGroqStatus().then(hasKey => {
-      sendResponse({
-        aiReady: hasKey,
-        aiLoading: false,
-        aiProgress: hasKey ? 100 : 0,
-        usingGroq: true
-      });
-    });
-    return true; // Keep channel open for async
-
-  } else if (message.type === 'INIT_AI_REQUEST') {
-    // No local AI to init - just check Groq status
-    checkGroqStatus().then(hasKey => {
-      sendResponse({ status: hasKey ? 'ready' : 'no_api_key' });
-    });
-    return true;
-
-  } else if (message.type === 'SCORE_TWEET_REQUEST') {
-    // Local AI is disabled - scoring happens via Groq in content script
-    sendResponse({ score: null, aiReady: false, useGroq: true });
-    return true;
+// Any provider/key/model change invalidates cached config and cooldowns.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'sync') return;
+  if (Object.keys(changes).some(key => Providers.SYNC_KEYS.includes(key))) {
+    configCache = null;
+    Providers.resetRuntime();
   }
-  return true;
+});
+
+async function aiStatus() {
+  const config = await getConfig();
+  const ready = Providers.chain(config);
+  return {
+    aiReady: ready.length > 0,
+    aiLoading: false,
+    aiProgress: ready.length > 0 ? 100 : 0,
+    provider: config.primary,
+    providerName: Providers.displayName(config.primary),
+    fallback: config.fallback,
+    fallbackName: config.fallback ? Providers.displayName(config.fallback) : null
+  };
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  switch (message && message.type) {
+    case 'XFP_SCORE_BATCH': {
+      const texts = Array.isArray(message.texts) ? message.texts.map(t => String(t)) : [];
+      if (texts.length === 0) {
+        sendResponse({ scores: null, attempts: [] });
+        return false;
+      }
+      getConfig()
+        .then(config => Providers.scoreBatch(texts, { config }))
+        .then(sendResponse)
+        .catch(() => sendResponse({ scores: null, attempts: [], retryAfterMs: 30000 }));
+      return true;
+    }
+    case 'XFP_TEST_PROVIDER': {
+      configCache = null;
+      Providers.testProvider(message.provider)
+        .then(sendResponse)
+        .catch(() => sendResponse({ state: 'network_error' }));
+      return true;
+    }
+    case 'XFP_GET_USAGE': {
+      getConfig().then(config => {
+        sendResponse({
+          provider: config.primary,
+          providerName: Providers.displayName(config.primary),
+          usage: Providers.usageFor(config.primary)
+        });
+      });
+      return true;
+    }
+    case 'GET_AI_STATUS_BG': {
+      aiStatus().then(sendResponse);
+      return true;
+    }
+    case 'INIT_AI_REQUEST': {
+      aiStatus().then(status => sendResponse({ status: status.aiReady ? 'ready' : 'no_api_key' }));
+      return true;
+    }
+    default:
+      return false;
+  }
 });
 
 // Listen for installation
@@ -59,6 +99,8 @@ chrome.runtime.onInstalled.addListener((details) => {
       }
     });
   }
+  // v1.3.2 kept one Groq status record; providers now have their own.
+  chrome.storage.local.remove('xfpGroqStatus');
 });
 
 // Badge update for stats

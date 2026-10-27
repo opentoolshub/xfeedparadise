@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XFeed Paradise",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "AI-powered feed filter that surfaces uplifting content and hides outrage-bait",
   "homepage_url": "https://github.com/opentoolshub/xfeedparadise",
   "permissions": [
@@ -14,6 +14,17 @@
     "https://news.google.com/*",
     "https://api.groq.com/*"
   ],
+  "optional_host_permissions": [
+    "https://api.openai.com/*",
+    "https://api.anthropic.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://openrouter.ai/*",
+    "https://api.together.xyz/*",
+    "https://api.typesafe.ai/*",
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -25,13 +36,13 @@
   "content_scripts": [
     {
       "matches": ["https://twitter.com/*", "https://x.com/*"],
-      "js": ["db.js", "filter.js", "content.js"],
+      "js": ["db.js", "providers.js", "filter.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://news.google.com/*"],
-      "js": ["db.js", "filter.js", "content-googlenews.js"],
+      "js": ["db.js", "providers.js", "filter.js", "content-googlenews.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }
