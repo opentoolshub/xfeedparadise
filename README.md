@@ -120,6 +120,10 @@ All tweets are stored locally in your browser using IndexedDB:
 
 When AI scoring is enabled with a key, tweet or news-item text is sent to the provider you selected (and to your fallback provider only when the main one fails). Local browsing data can be cleared via the popup.
 
+### Paradise Reader (phone, optional)
+
+Paradise Reader lets you read your already-filtered X feed on your phone. It is off by default. In the popup, open **Paradise Reader (phone)**, turn it on, read and confirm what gets saved, and **Sign in with Ideaflow**. The extension then uploads the X posts it scores (link, author handle and name, text, time, vibe score, kept or hidden, thumbnail link) to your private reader. Only you can see them; the newest 2,000 are kept for up to 30 days, and **Delete everything** removes them. Open the reader URL shown in the popup on your phone and add it to your home screen. See [PRIVACY.md](PRIVACY.md) and [reader/DEPLOY.md](reader/DEPLOY.md).
+
 ## Development
 
 ### Project Structure
@@ -132,12 +136,15 @@ XFeedParadise/
 ├── db.js              # IndexedDB wrapper
 ├── background.js      # Service worker (makes all provider API calls)
 ├── popup.html/js      # Extension popup UI
+├── popup-reader.js    # Popup section for the opt-in Paradise Reader
+├── sync.js            # Paradise Reader sync + Ideaflow sign-in (background worker)
+├── reader/            # Paradise Reader service + phone web app (Cloud Run)
 ├── styles.css         # Injected styles
 └── icons/             # Extension icons
 ```
 
 ### Testing Changes
-Run the unit tests with `npm test` (`node --test`). They exercise every provider adapter with a mocked `fetch`.
+Run the unit tests with `npm test` (`node --test`). They exercise every provider adapter with a mocked `fetch`, and the Paradise Reader sync. The reader service has its own tests: `cd reader && npm ci && npm test`.
 
 1. Make your edits
 2. Go to `chrome://extensions/`
