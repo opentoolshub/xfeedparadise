@@ -1196,6 +1196,11 @@
     top: 60px;
   }
 
+  .xfp-show-anyway {
+    white-space: nowrap;
+    flex: none;
+  }
+
   .xfp-toast {
     bottom: calc(72px + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 32px);
