@@ -495,7 +495,7 @@ test('built-in provider is the default for fresh installs and needs a required h
   assert.deepEqual([...P.chain(config).map(e => e.id)], ['builtin']);
   assert.ok(!P.SYNC_KEYS.includes('builtinApiKey'));
   const manifest = JSON.parse(read('manifest.json'));
-  assert.equal(manifest.version, '1.4.0');
+  assert.equal(manifest.version, JSON.parse(read('package.json')).version);
   assert.ok(manifest.host_permissions.includes(`${BUILTIN_URL}/*`));
   assert.equal(P.PROVIDERS.builtin.origin, `${BUILTIN_URL}/*`);
   assert.ok(read('popup.html').includes(`XFeed Paradise v${manifest.version}<`), 'popup footer version matches manifest');

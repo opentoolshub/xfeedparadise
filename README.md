@@ -4,6 +4,10 @@ A Chrome extension that transforms your X/Twitter feed into a paradise of uplift
 
 ## Features
 
+### Version 1.4.1
+- **Safari on iPhone, iPad and Mac**: a Safari Web Extension build lives in `safari/` (see `safari/README.md`); touch-friendly panel, tap-to-reveal for dimmed posts
+- **Fix**: changing the filter mode or threshold on X no longer un-filters visible posts until reload
+
 ### Version 1.4.0
 - **Vibe-based filtering**: Automatically scores tweets based on whether they're uplifting vs. outrage-inducing
 - **Multiple filter modes**:
