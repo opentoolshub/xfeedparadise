@@ -37,13 +37,13 @@
   "content_scripts": [
     {
       "matches": ["https://twitter.com/*", "https://x.com/*"],
-      "js": ["db.js", "providers.js", "filter.js", "content.js"],
+      "js": ["mobile.js", "db.js", "providers.js", "filter.js", "content.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://news.google.com/*"],
-      "js": ["db.js", "providers.js", "filter.js", "content-googlenews.js"],
+      "js": ["mobile.js", "db.js", "providers.js", "filter.js", "content-googlenews.js"],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }

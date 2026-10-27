@@ -530,9 +530,15 @@
   function reprocessVisibleTweets() {
     const containers = document.querySelectorAll('[data-testid="cellInnerDiv"]');
     containers.forEach(container => {
-      container.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+      container.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled', 'xfp-revealed');
       container.querySelector('.xfp-vibe-indicator')?.remove();
       container.querySelector('.xfp-warning-label')?.remove();
+      // Let processTweet/registerTweet run again for this post.
+      const article = container.querySelector('article[data-testid="tweet"]');
+      if (article) {
+        delete article.dataset.xfpProcessed;
+        delete article.dataset.xfpObserved;
+      }
     });
 
     // Reset counts and reprocess

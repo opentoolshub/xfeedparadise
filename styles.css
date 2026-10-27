@@ -1086,3 +1086,126 @@
 @keyframes xfp-spin {
   to { transform: rotate(360deg); }
 }
+/* ========================================
+   Touch screens and phone widths (Safari on iPhone/iPad, mobile x.com)
+   ======================================== */
+
+/* No hover on touch: keep dimmed posts dimmed until tapped (mobile.js adds
+   .xfp-revealed on the first tap) and drop hover-only effects. */
+@media (hover: none) {
+  .xfp-dimmed:hover,
+  [data-xfp-article].xfp-dimmed:hover {
+    opacity: 0.3 !important;
+    filter: grayscale(80%) !important;
+  }
+
+  .xfp-dimmed.xfp-revealed,
+  .xfp-dimmed.xfp-revealed:hover,
+  [data-xfp-article].xfp-dimmed.xfp-revealed {
+    opacity: 1 !important;
+    filter: none !important;
+  }
+
+  .xfp-floating-btn:hover,
+  .xfp-load-more-btn:hover {
+    transform: none;
+  }
+}
+
+/* Finger-sized tap targets */
+@media (pointer: coarse) {
+  .xfp-dropdown-close {
+    min-width: 44px;
+    min-height: 44px;
+    margin: -10px -12px -10px 0;
+    font-size: 24px;
+  }
+
+  .xfp-section-toggle,
+  .xfp-settings-toggle,
+  .xfp-api-toggle-btn {
+    min-height: 44px;
+  }
+
+  .xfp-setting-btn,
+  .xfp-show-anyway,
+  .xfp-clear-data-btn {
+    min-height: 40px;
+  }
+
+  .xfp-floating-panel input,
+  .xfp-floating-panel select,
+  .xfp-floating-panel textarea {
+    font-size: 16px; /* below 16px iOS zooms the page on focus */
+  }
+}
+
+/* Phone widths: respect notches and the home indicator, and keep the panel
+   and toasts inside the screen. Values stay clear of mobile x.com's bottom
+   tab bar and compose button. */
+@media (max-width: 600px) {
+  .xfp-floating-panel.pos-bottom-right {
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .xfp-floating-panel.pos-bottom-left {
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .xfp-floating-panel.site-googlenews.pos-bottom-right,
+  .xfp-floating-panel.site-googlenews.pos-bottom-left {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .xfp-floating-panel.pos-top-right,
+  .xfp-floating-panel.pos-top-left {
+    top: calc(64px + env(safe-area-inset-top, 0px));
+  }
+
+  .xfp-floating-panel.pos-top-right,
+  .xfp-floating-panel.pos-middle-right {
+    right: calc(12px + env(safe-area-inset-right, 0px));
+  }
+
+  .xfp-floating-panel.pos-top-left {
+    left: calc(12px + env(safe-area-inset-left, 0px));
+  }
+
+  .xfp-floating-btn {
+    width: 48px;
+    height: 48px;
+  }
+
+  .xfp-floating-btn-icon {
+    font-size: 22px;
+  }
+
+  .xfp-floating-dropdown {
+    bottom: 60px;
+    width: min(320px, calc(100vw - 24px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
+    max-height: calc(100vh - 240px);
+    max-height: calc(100dvh - 220px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
+  .xfp-floating-panel.pos-top-right .xfp-floating-dropdown,
+  .xfp-floating-panel.pos-top-left .xfp-floating-dropdown {
+    top: 60px;
+  }
+
+  .xfp-show-anyway {
+    white-space: nowrap;
+    flex: none;
+  }
+
+  .xfp-toast {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    max-width: calc(100vw - 32px);
+    width: max-content;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+}

@@ -569,7 +569,7 @@
   function reprocessVisibleArticles() {
     const containers = document.querySelectorAll('article, c-wiz[data-n-au], [data-n-tid]');
     containers.forEach(container => {
-      container.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+      container.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled', 'xfp-revealed');
       container.querySelector('.xfp-vibe-indicator')?.remove();
       container.querySelector('.xfp-warning-label')?.remove();
       container.dataset.xfpProcessed = '';

@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <style>
     * {
       margin: 0;
@@ -790,6 +791,20 @@
 
     .gear-btn-prominent.expanded svg {
       transform: rotate(90deg);
+    }
+  </style>
+  <style>
+    /* Safari on iPhone/iPad shows the popup as a full-width sheet. */
+    @media (hover: none) and (pointer: coarse) {
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        width: auto;
+        max-width: 560px;
+        margin: 0 auto;
+        padding: 16px max(16px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+      }
+      input, select, textarea { font-size: 16px; }
+      button, select { min-height: 40px; }
     }
   </style>
 </head>
