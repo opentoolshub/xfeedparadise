@@ -121,7 +121,7 @@ for (const [kind, makeStore] of stores) {
       const res = await call('/v1/items', { token, method: 'POST', body: { items: [post(1), post(2), post(3), { id: 'x', handle: 'bad' }, post(2, { score: 55 })] } });
       assert.equal(res.status, 200);
       const out = await res.json();
-      assert.equal(out.saved, 3);
+      assert.equal(out.saved, 4, 'distinct observations count separately; feed items still dedupe by tweet ID');
       assert.equal(out.rejected, 1);
       const list = await (await call('/v1/items', { token })).json();
       assert.deepEqual(list.items.map(i => i.handle), ['user3', 'user2', 'user1']);

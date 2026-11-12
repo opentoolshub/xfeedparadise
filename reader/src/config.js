@@ -24,6 +24,8 @@ export function loadConfig(env = process.env) {
     sessionDays: Number(env.SESSION_DAYS) || 30,
     databaseUrl: env.DATABASE_URL || '',
     allowMemoryStore: env.READER_STORE === 'memory',
+    noosUrl: env.NOOS_PARADISE_URL || '',
+    noosSecret: env.NOOS_PARADISE_SECRET || '',
     perUser: Number(env.READER_MAX_ITEMS) || LIMITS.perUser,
     ttlDays: Number(env.READER_TTL_DAYS) || LIMITS.ttlDays
   };

@@ -71,7 +71,7 @@ function setup({ local = {}, handler } = {}) {
   const fetchImpl = async (url, init = {}) => {
     const call = { url: String(url), method: init.method || 'GET', headers: init.headers || {}, body: init.body };
     calls.push(call);
-    if (call.url === `${READER}/api/config`) return json(200, { issuer: ISSUER, extensionClientId: CLIENT, readerUrl: READER });
+    if (call.url === `${READER}/api/config`) return json(200, { issuer: ISSUER, extensionClientId: CLIENT, readerUrl: READER, archive: true });
     if (call.url === `${ISSUER}/.well-known/openid-configuration`) {
       return json(200, { issuer: ISSUER, authorization_endpoint: `${ISSUER}/oauth2/authorize`, token_endpoint: `${ISSUER}/oauth2/token`, revocation_endpoint: `${ISSUER}/oauth2/revoke` });
     }
@@ -141,15 +141,16 @@ test('opted in + signed in: debounced batches of at most 50', async () => {
   assert.equal(chrome.storage.local.data.xfpReaderQueue.length, 0);
 });
 
-test('a re-scored post is sent once with its latest score', async () => {
+test('raw capture and distinct scoring outcomes survive in the same batch', async () => {
   const { sync, uploads, clock: c } = setup({ local: signedIn() });
-  await sync.enqueue([{ ...post(1), score: -5, kept: false }]);
+  await sync.enqueue([{ ...post(1), score: null, kept: null }]);
   await sync.enqueue([{ ...post(1), score: 60, kept: true }]);
   await c.advance(8000);
   const items = JSON.parse(uploads()[0].body).items;
-  assert.equal(items.length, 1);
-  assert.equal(items[0].score, 60);
-  assert.equal(items[0].kept, true);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].score, null);
+  assert.equal(items[1].score, 60);
+  assert.equal(items[1].kept, true);
 });
 
 test('only disclosed fields are sent; non-X thumbnails are dropped', async () => {
@@ -160,7 +161,7 @@ test('only disclosed fields are sent; non-X thumbnails are dropped', async () =>
   await c.advance(8000);
   const items = JSON.parse(uploads()[0].body).items;
   assert.equal(items.length, 2);
-  assert.deepEqual(Object.keys(items[0]).sort(), ['handle', 'id', 'kept', 'name', 'postedAt', 'score', 'text', 'thumb']);
+  assert.deepEqual(Object.keys(items[0]).sort(), ['context', 'handle', 'id', 'kept', 'name', 'policy', 'postedAt', 'saved', 'score', 'sources', 'text', 'thumb']);
   assert.equal(items[0].thumb, 'https://pbs.twimg.com/media/a.jpg');
   assert.equal(items[1].thumb, null);
 });
@@ -293,16 +294,16 @@ test('delete-all calls DELETE with the bearer token and clears local counters', 
 
 test('content script hands posts over only when the reader is on', () => {
   const content = read('content.js');
-  assert.match(content, /async function readerRecord\(article, tweet, score\) \{\n\s+await readerReady;\n\s+if \(!readerOn \|\| !VibeFilter\.settings\.enabled\) return;/);
+  assert.match(content, /async function readerRecord\(article, tweet, score, scoringSource = null\) \{\n\s+await readerReady;\n\s+if \(!readerOn \|\| !VibeFilter\.settings\.enabled\) return;/);
   assert.match(content, /readerOn = readerActive\(/);
-  assert.equal((content.match(/readerRecord\(article, tweet, (score|aiScore)\);/g) || []).length, 2, 'initial score and AI refinement');
+  assert.ok(content.indexOf('readerRecord(article, tweet, null);') < content.indexOf('const { score, source } = VibeFilter.getScoreWithRefinement'), 'raw capture precedes scorer invocation');
   assert.doesNotMatch(read('content-googlenews.js'), /XFP_READER_ITEM/, 'Google News is never uploaded');
   assert.doesNotMatch(content, /\bfetch\s*\(/);
 });
 
-test('manifest pins the development ID and keeps version 1.3.3', () => {
+test('manifest pins the development ID and keeps version 1.4.1', () => {
   const manifest = JSON.parse(read('manifest.json'));
-  assert.equal(manifest.version, '1.3.3');
+  assert.equal(manifest.version, '1.4.1');
   assert.ok(manifest.permissions.includes('identity'));
   assert.match(manifest.key, /^MIIB[A-Za-z0-9+/=]+$/);
   // Derive the extension ID from the key the way Chrome does.
@@ -317,10 +318,18 @@ test('manifest pins the development ID and keeps version 1.3.3', () => {
 test('popup discloses fields, destination, privacy, retention and deletion before opt-in', () => {
   const html = read('popup.html');
   const consent = html.slice(html.indexOf('id="readerConsent"'), html.indexOf('id="readerConsentYes"'));
-  for (const phrase of ['post link', 'author handle and name', 'post text and time', 'vibe score', 'kept or hidden', 'image thumbnail link',
-    'Where it goes', 'Ideaflow ID', 'only you can see it', 'No sharing, no community feed', '2,000 posts', '30 days', 'Delete everything']) {
+  for (const phrase of ['post link', 'author handle and name', 'post text and time', 'vibe score', 'kept/hidden', 'image thumbnail link',
+    'Where it goes', 'Ideaflow ID', 'only you can see it', 'No sharing, no community feed', 'until you delete them', 'Noos archive', 'Delete everything']) {
     assert.ok(consent.includes(phrase), phrase);
   }
   assert.match(html, /<input type="checkbox" id="readerOptIn">/, 'toggle starts unchecked');
   assert.match(read('popup-reader.js'), /e\.target\.checked = false;\n\s+\$\('readerConsent'\)\.hidden = false;/, 'checking the toggle shows the disclosure first');
+});
+
+
+test('concurrent first raw capture and classification do not overwrite each other', async () => {
+  const { sync, uploads, clock: c } = setup({ local: signedIn() });
+  await Promise.all([sync.enqueue([{ ...post(1), score: null, kept: null }]), sync.enqueue([post(1)])]);
+  await c.advance(8000);
+  assert.equal(JSON.parse(uploads()[0].body).items.length, 2);
 });

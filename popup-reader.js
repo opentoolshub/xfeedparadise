@@ -50,7 +50,7 @@
       const n = Number(st.syncedTotal) || 0;
       status.textContent = `Synced ${n.toLocaleString()} post${n === 1 ? '' : 's'} · ${ago(st.lastSyncAt)}${st.pending ? ` · ${st.pending} waiting` : ''}`;
     } else {
-      status.textContent = st.pending ? `${st.pending} waiting to sync` : 'Waiting for posts. Scroll X to sync.';
+      status.textContent = st.droppedCaptures ? `${st.droppedCaptures} captures could not fit in the offline queue; reconnect to keep capturing.` : st.pending ? `${st.pending} waiting to sync` : 'Waiting for posts. Scroll X to sync.';
     }
 
     const link = $('readerLink');

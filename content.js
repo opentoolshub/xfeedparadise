@@ -234,6 +234,12 @@
         },
         isRetweet,
         url: `https://x.com/${authorHandle}/status/${tweetId}`,
+        readerCapture: {
+          thumb: article.querySelector('[data-testid="tweetPhoto"] img')?.src || null,
+          quoteText: article.querySelector('[data-testid="quoteTweet"]')?.textContent?.slice(0, 8000) || null,
+          saved: location.pathname.startsWith('/i/bookmarks'),
+          source: location.pathname.startsWith('/i/bookmarks') ? 'x-bookmarks' : 'x-feed'
+        },
         collectedAt: Date.now()
       };
 
@@ -367,10 +373,10 @@
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.xfpReader) readerOn = readerActive(changes.xfpReader.newValue);
   });
-  async function readerRecord(article, tweet, score) {
+  async function readerRecord(article, tweet, score, scoringSource = null) {
     await readerReady;
     if (!readerOn || !VibeFilter.settings.enabled) return;
-    const thumb = article.querySelector('[data-testid="tweetPhoto"] img')?.src || null;
+    const thumb = tweet.readerCapture?.thumb || null;
     chrome.runtime.sendMessage({
       type: 'XFP_READER_ITEM',
       item: {
@@ -380,7 +386,11 @@
         text: tweet.text,
         postedAt: tweet.timestamp,
         score,
-        kept: VibeFilter.shouldShow(score),
+        kept: score === null ? null : VibeFilter.shouldShow(score),
+        sources: [tweet.readerCapture?.source || 'x-feed'],
+        saved: tweet.readerCapture?.saved === true,
+        policy: score === null ? null : JSON.stringify({ threshold: VibeFilter.settings.threshold, mode: VibeFilter.settings.filterMode, source: scoringSource }),
+        context: JSON.stringify({ metrics: tweet.metrics, media: tweet.media, isRetweet: tweet.isRetweet, quoteText: tweet.readerCapture?.quoteText || null }),
         thumb
       }
     }).catch(() => {});
@@ -405,12 +415,16 @@
     // Also track by ID (for stats)
     processedTweets.add(tweet.id);
 
+    // Capture before invoking a scorer; classification failure cannot discard the raw post.
+    readerRecord(article, tweet, null);
+
     // Get score with AI refinement callback
     const { score, source } = VibeFilter.getScoreWithRefinement(
       tweet.id,
       tweet.text,
       // Callback when AI score arrives - update the filter
       (aiScore, aiSource) => {
+        readerRecord(article, tweet, aiScore, aiSource);
         if (article && article.isConnected) {
           tweet.vibeScore = aiScore;
           tweet.scoredWithAI = aiSource === 'ai';
@@ -420,7 +434,6 @@
           // Update in database
           const tweetWithAI = { ...tweet, vibeScore: aiScore, scoredWithAI: aiSource === 'ai' };
           window.tweetDB.saveTweet(tweetWithAI).catch(() => {});
-          readerRecord(article, tweet, aiScore);
         }
       }
     );
@@ -430,7 +443,7 @@
 
     // Apply filter immediately with initial score
     applyFilter(article, tweet, score);
-    readerRecord(article, tweet, score);
+    readerRecord(article, tweet, score, source);
 
     // Save to database (non-blocking)
     window.tweetDB.saveTweet(tweet).catch(error => {

@@ -191,3 +191,15 @@ button { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .ptr, .ptr.loading .ptr-spinner, .spinner { transition: none; animation: none; }
 }
+
+/* Capture provenance stays subordinate to the post, in native disclosure controls. */
+.controls { flex-wrap: wrap; }
+.seg { min-height: 44px; padding: 7px 10px; }
+.threshold { min-width: 100%; }
+.capture-history { margin-top: 12px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+.capture-history summary { cursor: pointer; min-height: 44px; padding-top: 12px; }
+.capture-history summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.capture-event { padding: 8px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.capture-event .post-text { color: var(--text); font-size: 13px; }
+
+.avatar-btn { width: 44px; height: 44px; }

@@ -128,9 +128,29 @@ All tweets are stored locally in your browser using IndexedDB:
 
 When AI scoring is enabled, tweet or news-item text is sent to the built-in scoring service (which forwards it to OpenAI or TypeSafe and does not keep it) or to the provider you selected with your key (and to your fallback provider only when the main one fails). Local browsing data can be cleared via the popup.
 
-### Paradise Reader (phone, optional)
+### Noos archive fork (unreleased)
 
-Paradise Reader lets you read your already-filtered X feed on your phone. It is off by default. In the popup, open **Paradise Reader (phone)**, turn it on, read and confirm what gets saved, and **Sign in with Ideaflow**. The extension then uploads the X posts it scores (link, author handle and name, text, time, vibe score, kept or hidden, thumbnail link) to your private reader. Only you can see them; the newest 2,000 are kept for up to 30 days, and **Delete everything** removes them. Open the reader URL shown in the popup on your phone and add it to your home screen. See [PRIVACY.md](PRIVACY.md) and [reader/DEPLOY.md](reader/DEPLOY.md).
+This branch adds a separate Ideaflow ID + Noos archive to the existing phone
+reader. After explicit opt-in and sign-in, rendered X posts are queued before
+scoring; distinct scoring/filtering snapshots and bookmark provenance are saved.
+The phone web app has **Filtered**, **All captured**, and **Saves** views, with
+expandable decision history. Content dedupes by tweet ID within an account;
+bookmark membership remains independent of feed sightings. Noos keeps normalized
+raw snapshots and outcomes until deleted, without the older reader's 30-day TTL.
+
+It captures what the enabled extension encounters, plus explicitly imported
+snapshots. It is not a complete background X crawl, a full raw API-response or
+media-file archive, or an automatic bookmark sync. Bloomscroll's existing
+owner-checked `x-saved` snapshots can be imported with `reader/import-saves.mjs`.
+Partial snapshots never remove bookmarks. The pending offline queue is bounded;
+its status reports captures dropped when it fills. Private phone responses are
+network-only; the app shell can load offline.
+
+The original released extension and the separate mobile-site controls branch
+remain independent. This branch is source preparation, not a deployed reader or
+an installed fork. Its development extension key is inherited; configure a
+separate release identity/client before installing alongside the original.
+See [PRIVACY.md](PRIVACY.md) and [the Noos deployment boundary](reader/DEPLOY.md).
 
 ## Development
 

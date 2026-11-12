@@ -5,7 +5,7 @@ export const LIMITS = {
   batch: 50,
   perUser: 2000,
   ttlDays: 30,
-  text: 4000,
+  text: 40000,
   name: 100,
   pageDefault: 30,
   pageMax: 100
@@ -36,11 +36,13 @@ export function normalizeItem(raw, now = Date.now()) {
   const id = String(raw.id ?? '');
   const handle = String(raw.handle ?? '');
   if (!ID_RE.test(id) || !HANDLE_RE.test(handle)) return null;
-  const score = Number(raw.score);
-  if (!Number.isFinite(score)) return null;
+  const score = raw.score === null ? null : Number(raw.score);
+  if (score !== null && !Number.isFinite(score)) return null;
   let postedAt = toMs(raw.postedAt);
   // Reject nonsense times (before X existed or more than a day ahead).
   if (postedAt !== null && (postedAt < Date.UTC(2006, 0, 1) || postedAt > now + 86_400_000)) postedAt = null;
+  const sources = Array.isArray(raw.sources) ? [...new Set(raw.sources.filter(s => ['x-feed','x-bookmarks','x-following','x-for-you'].includes(s)))].slice(0, 4) : ['x-feed'];
+  if (!sources.length) return null;
   const thumb = typeof raw.thumb === 'string' && THUMB_RE.test(raw.thumb) ? raw.thumb : null;
   return {
     id,
@@ -48,10 +50,14 @@ export function normalizeItem(raw, now = Date.now()) {
     name: cleanText(raw.name, LIMITS.name) || handle,
     text: cleanText(raw.text, LIMITS.text),
     url: `https://x.com/${handle}/status/${id}`,
-    postedAt: postedAt ?? now,
-    score: Math.max(-100, Math.min(100, Math.round(score))),
-    kept: raw.kept === true,
-    thumb
+    postedAt: Math.round(postedAt ?? now),
+    score: score === null ? null : Math.max(-100, Math.min(100, Math.round(score))),
+    kept: score === null ? null : raw.kept === true,
+    thumb,
+    sources,
+    saved: raw.saved === true,
+    policy: typeof raw.policy === 'string' ? cleanText(raw.policy, 1000) : null,
+    context: typeof raw.context === 'string' ? cleanText(raw.context, 10000) : null
   };
 }
 

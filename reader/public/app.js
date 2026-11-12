@@ -17,12 +17,12 @@ const state = {
 
 try {
   const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-  if (saved.mode === 'all' || saved.mode === 'kept') state.mode = saved.mode;
+  if (['all', 'kept', 'saved'].includes(saved.mode)) state.mode = saved.mode;
   if (Number.isInteger(saved.minScore)) state.minScore = Math.max(-50, Math.min(50, saved.minScore));
 } catch { /* ignore */ }
 
 function savePrefs() {
-  localStorage.setItem(PREFS_KEY, JSON.stringify({ mode: state.mode, minScore: state.minScore }));
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({ mode: state.mode, minScore: state.minScore })); } catch {}
 }
 
 function reportError(message) {
@@ -36,6 +36,7 @@ window.addEventListener('unhandledrejection', e => reportError(e.reason && e.rea
 // ---------------------------------------------------------------- formatting
 
 function vibe(score) {
+  if (score === null) return ['Unscored', 'vibe-neutral'];
   if (score >= 50) return ['Enlightening', 'vibe-enlightening'];
   if (score >= 20) return ['Uplifting', 'vibe-uplifting'];
   if (score >= 0) return ['Neutral', 'vibe-neutral'];
@@ -78,6 +79,14 @@ function monogram(initial, handle) {
   return node;
 }
 
+function policyLabel(value) {
+  try {
+    const p = JSON.parse(value);
+    const source = p.source === 'ai' ? 'AI scoring' : p.source === 'keyword' ? 'Keyword scoring' : 'Scoring';
+    return `${source}${Number.isFinite(p.threshold) ? ` · keep at ${p.threshold} or above` : ''}${p.mode ? ` · ${p.mode} mode` : ''}`;
+  } catch { return 'Recorded filtering policy'; }
+}
+
 function card(item) {
   const [label, cls] = vibe(item.score);
   const initial = (item.name || item.handle || '?').trim().charAt(0).toUpperCase();
@@ -91,16 +100,24 @@ function card(item) {
         el('time', { datetime: posted.toISOString(), title: posted.toLocaleString(), text: ago(item.postedAt) })
       ])
     ]),
-    el('span', { class: `vibe ${cls}`, title: `Vibe score ${item.score}`, text: `${label} ${item.score > 0 ? '+' : ''}${item.score}` })
+    el('span', { class: `vibe ${cls}`, title: `Vibe score ${item.score}`, text: item.score === null ? label : `${label} ${item.score > 0 ? '+' : ''}${item.score}` })
   ]);
   const body = item.text ? el('p', { class: 'post-text', text: item.text }) : null;
   const thumb = item.thumb ? el('img', { class: 'post-thumb', src: item.thumb, alt: '', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer' }) : null;
   const foot = el('div', { class: 'post-foot' }, [
-    item.kept ? null : el('span', { class: 'tag-hidden', text: 'Hidden on X' }),
+    item.kept === false ? el('span', { class: 'tag-hidden', text: 'Filtered out' }) : null,
+    item.saved ? el('span', { class: 'tag-hidden', text: 'X bookmark' }) : null,
     el('a', { class: 'post-link', href: item.url, target: '_blank', rel: 'noopener noreferrer', text: 'Open on X ↗' })
   ]);
   if (thumb) thumb.addEventListener('error', () => thumb.remove());
-  return el('li', { class: `post${item.kept ? '' : ' is-hidden'}` }, [head, body, thumb, foot]);
+  const history = item.observations?.length ? el('details', { class: 'capture-history' }, [
+    el('summary', { text: `Capture & filtering history (${item.observations.length})` }),
+    ...item.observations.map(x => el('div', { class: 'capture-event' }, [
+      el('p', { text: x.score === null ? 'Captured before scoring' : `${x.kept ? 'Kept' : 'Filtered out'} · score ${x.score}` }),
+      x.policy ? el('p', { class: 'who-meta', text: policyLabel(x.policy) }) : null,
+    ]))
+  ]) : null;
+  return el('li', { class: `post${item.kept === false ? ' is-hidden' : ''}` }, [head, body, thumb, foot, history]);
 }
 
 // ---------------------------------------------------------------- data
@@ -118,7 +135,8 @@ async function api(path, options = {}) {
 function query(cursor) {
   const q = new URLSearchParams({ limit: String(PAGE) });
   if (state.mode === 'kept') q.set('kept', 'true');
-  if (state.minScore > -50) q.set('minScore', String(state.minScore));
+  if (state.mode === 'saved') q.set('saved', 'true');
+  if (state.mode === 'kept' && state.minScore > -50) q.set('minScore', String(state.minScore));
   if (cursor) q.set('cursor', cursor);
   return `/v1/items?${q}`;
 }
@@ -143,8 +161,10 @@ async function loadMore() {
     state.cursor = body.nextCursor;
     state.done = !body.nextCursor;
     $('empty').hidden = feed.children.length > 0;
-    if (state.mode === 'kept' || state.minScore > -50) {
-      $('emptyText').textContent = 'No posts match these filters yet. Try Everything or lower the minimum vibe.';
+    if (state.mode === 'saved') $('emptyText').textContent = 'Open X bookmarks with capture enabled, or import a saved-post snapshot. Feed sightings alone do not count as saves.';
+    if (state.mode === 'all') $('emptyText').textContent = 'Turn on capture in the extension and scroll X. Only posts actually encountered or imported appear here.';
+    if (state.mode === 'kept') {
+      $('emptyText').textContent = 'No posts match these filters yet. Try All captured or lower the minimum vibe.';
     }
     setStatus(cached ? 'Offline. Showing the last page you loaded.' : '');
   } catch (error) {
@@ -182,6 +202,7 @@ async function loadMe() {
 // ---------------------------------------------------------------- views
 
 function showSignIn() {
+  document.title = 'Sign in — Paradise Reader';
   app.dataset.view = 'signin';
   $('signin').hidden = false;
   for (const id of ['controls', 'accountBtn', 'footer', 'empty', 'status']) $(id).hidden = true;
@@ -194,12 +215,16 @@ function showSignIn() {
 
 function showFeed() {
   app.dataset.view = 'feed';
+  renderControls();
   $('signin').hidden = true;
   for (const id of ['controls', 'accountBtn', 'footer']) $(id).hidden = false;
   if (location.search) history.replaceState(null, '', '/');
 }
 
 function renderControls() {
+  const title = { all: 'All captured', kept: 'Filtered feed', saved: 'Saves' }[state.mode];
+  if (app.dataset.view === 'feed') document.title = `${title} — Paradise Reader`;
+  $('threshold').closest('label').hidden = state.mode !== 'kept';
   for (const b of document.querySelectorAll('.seg')) b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode));
   $('threshold').value = String(state.minScore);
   $('thresholdValue').textContent = state.minScore <= -50 ? 'Any' : `≥ ${state.minScore > 0 ? '+' : ''}${state.minScore}`;

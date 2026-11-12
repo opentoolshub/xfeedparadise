@@ -38,20 +38,26 @@
     if (!raw || typeof raw !== 'object') return null;
     const id = String(raw.id || '');
     const handle = String(raw.handle || '');
-    const score = Number(raw.score);
-    if (!ID_RE.test(id) || !HANDLE_RE.test(handle) || !Number.isFinite(score)) return null;
+    const score = raw.score === null ? null : Number(raw.score);
+    if (!ID_RE.test(id) || !HANDLE_RE.test(handle) || (score !== null && !Number.isFinite(score))) return null;
     const postedAt = Number(raw.postedAt);
     return {
       id,
       handle,
       name: String(raw.name || handle).slice(0, 100),
-      text: String(raw.text || '').slice(0, 4000),
+      text: String(raw.text || '').slice(0, 40000),
       postedAt: Number.isFinite(postedAt) ? postedAt : Date.now(),
-      score: Math.max(-100, Math.min(100, Math.round(score))),
-      kept: raw.kept === true,
+      score: score === null ? null : Math.max(-100, Math.min(100, Math.round(score))),
+      kept: score === null ? null : raw.kept === true,
+      sources: Array.isArray(raw.sources) ? raw.sources.filter(x => ['x-feed','x-bookmarks','x-following','x-for-you'].includes(x)).slice(0, 4) : ['x-feed'],
+      saved: raw.saved === true,
+      policy: typeof raw.policy === 'string' ? raw.policy.slice(0, 1000) : null,
+      context: typeof raw.context === 'string' ? raw.context.slice(0, 10000) : null,
       thumb: typeof raw.thumb === 'string' && THUMB_RE.test(raw.thumb) ? raw.thumb.slice(0, 400) : null
     };
   }
+
+  const eventKey = item => JSON.stringify(item);
 
   function b64urlBytes(bytes) {
     let s = '';
@@ -79,6 +85,7 @@
     const debounceMs = deps.debounceMs ?? DEBOUNCE_MS;
     const local = chrome.storage.local;
 
+    let queueLoading = null;
     let queue = null; // Map id -> item, loaded lazily from storage
     let timer = null;
     let failures = 0;
@@ -111,9 +118,12 @@
 
     async function loadQueue() {
       if (queue) return queue;
-      const stored = (await local.get(KEYS.queue))[KEYS.queue];
-      queue = new Map(Array.isArray(stored) ? stored.map(item => [item.id, item]) : []);
-      return queue;
+      queueLoading ||= local.get(KEYS.queue).then(r => {
+        const stored = r[KEYS.queue];
+        queue = new Map(Array.isArray(stored) ? stored.map(item => [eventKey(item), item]) : []);
+        return queue;
+      }).finally(() => { queueLoading = null; });
+      return queueLoading;
     }
     async function saveQueue() {
       await local.set({ [KEYS.queue]: [...queue.values()] });
@@ -142,11 +152,13 @@
       for (const raw of [].concat(rawItems)) {
         const item = toItem(raw);
         if (!item) continue;
-        q.delete(item.id); // re-insert so the newest score wins and order is recent-last
-        q.set(item.id, item);
+        q.delete(eventKey(item)); // exact retries dedupe; raw and filter outcomes remain separate
+        q.set(eventKey(item), item);
         queued++;
       }
-      while (q.size > QUEUE_MAX) q.delete(q.keys().next().value);
+      let dropped = 0;
+      while (q.size > QUEUE_MAX || JSON.stringify([...q.values()]).length > 1500000) { q.delete(q.keys().next().value); dropped++; }
+      if (dropped) { const st = await getState(); await setState({ droppedCaptures: (st.droppedCaptures || 0) + dropped }); }
       await saveQueue();
       if (queued) schedule();
       return { queued };
@@ -219,6 +231,7 @@
     }
 
     async function upload(items, token) {
+      if (!(await readerConfig()).archive) throw new Error('This fork requires the Noos archive reader.');
       return fetchImpl(`${await readerOrigin()}/v1/items`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
@@ -269,7 +282,7 @@
         const body = await res.json().catch(() => ({}));
         for (const item of batch) {
           // Keep an item re-scored while the request was in flight.
-          if (q.get(item.id) === item) q.delete(item.id);
+          if (q.get(eventKey(item)) === item) q.delete(eventKey(item));
         }
         await saveQueue();
         failures = 0;

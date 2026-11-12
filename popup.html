@@ -897,16 +897,16 @@
       </div>
       <div class="reader-consent" id="readerConsent" hidden>
         <div class="reader-consent-title">Before you turn this on</div>
-        <p>XFeed Paradise will upload each X post it scores to your private Paradise Reader:</p>
+        <p>XFeed Paradise will upload each rendered X post it encounters while filtering is enabled, before scoring, plus the outcomes to your private Paradise Reader:</p>
         <ul>
           <li>post link, author handle and name</li>
-          <li>post text and time</li>
-          <li>vibe score, and whether it was kept or hidden</li>
+          <li>post text and time, rendered quote text, media flags and engagement counts</li>
+          <li>vibe scores, threshold and filtering mode, kept/hidden outcomes and bookmark provenance</li>
           <li>image thumbnail link</li>
         </ul>
-        <p><strong>Where it goes:</strong> the XFeed Paradise Reader service (Google Cloud, US), tied to your Ideaflow ID.</p>
+        <p><strong>Where it goes:</strong> your private Noos archive through Paradise Reader, tied to your Ideaflow ID.</p>
         <p><strong>Private:</strong> only you can see it. No sharing, no community feed. Google News items are never uploaded.</p>
-        <p><strong>Kept:</strong> your newest 2,000 posts, each for up to 30 days. <strong>Delete:</strong> use "Delete everything" here or in the reader. Turning this off stops new uploads.</p>
+        <p><strong>Kept:</strong> captured posts and distinct filtering snapshots until you delete them. This fork requires the Noos archive service. <strong>Delete:</strong> use "Delete everything" here or in the reader. Turning this off stops new uploads.</p>
         <div class="reader-actions">
           <button class="reader-btn primary" id="readerConsentYes">Turn on</button>
           <button class="reader-btn" id="readerConsentNo">Cancel</button>

@@ -30,22 +30,35 @@ Nothing is sent to a provider you choose unless you add a key (or, for a custom 
 - Supported providers and their privacy policies: [Groq](https://groq.com/privacy-policy/), [OpenAI](https://openai.com/policies/privacy-policy/), [Anthropic](https://www.anthropic.com/legal/privacy), [Google Gemini API](https://ai.google.dev/gemini-api/terms), [OpenRouter](https://openrouter.ai/privacy), [Together AI](https://www.together.ai/privacy), [TypeSafe](https://typesafe.ai). A custom endpoint (for example, a local Ollama server) receives the text at the URL you enter.
 - For providers other than Groq, Chrome asks for your permission before the extension can contact that provider's host.
 
-#### Paradise Reader (optional, off by default)
-Paradise Reader lets you read your filtered X feed on your phone. Nothing is uploaded unless you turn on **Paradise Reader (phone)** in the popup, confirm the disclosure, and sign in with your Ideaflow ID. While it is on and you are signed in:
-- For each X post the extension scores, it uploads: the post ID and link, the author's handle and display name, the post text, the post time, the vibe score, whether the post was kept or hidden, and an image thumbnail link on X's image server (`pbs.twimg.com`). Avatars, engagement counts and your X account name are not uploaded. Google News items are never uploaded.
-- Posts go to the XFeed Paradise Reader service (Google Cloud Run and Cloud SQL, US region) and are linked to your Ideaflow ID account identifier. Only you can read them, after signing in. There is no sharing and no community feed.
-- The service keeps your newest 2,000 posts, each for at most 30 days. It does not log post text.
-- Sign-in uses Ideaflow ID (`id.ideaflow.app`). The extension keeps its sign-in tokens in local extension storage (not synced).
-- "Delete everything" in the popup or in the reader permanently deletes all your saved posts. Turning the feature off or signing out stops uploads immediately; "Clear stored data" also signs the extension out.
-- The reader web app has no analytics or third-party scripts. Thumbnails load from X's image server without a referrer.
+#### Noos archive reader (unreleased fork, optional and off by default)
 
-The extension does not upload viewed feed items to a community database. A previous version had a community-sync setting; this release no longer uses it, including for existing installations where that setting was enabled.
+This branch requires the Noos archive API and is not deployed by this source
+change. Nothing is uploaded until the reader is enabled, the disclosure is
+confirmed, and you sign in with Ideaflow ID. While filtering and capture are on:
 
-### Data We Do NOT Collect
-- Your name, email, or any personal identifiers (unless you sign in to Paradise Reader, which links your saved posts to your Ideaflow ID account identifier)
-- Your browsing history outside of X/Twitter and Google News
-- Your Twitter/X account credentials
-- New feed data while filtering is disabled
+- Rendered X post ID/link, author handle/name, text/time and thumbnail link are
+  queued before scoring. Bounded context contains engagement counts, media flags,
+  repost flag and rendered quote text. Distinct scores, thresholds, filter modes,
+  scoring-source labels, and kept/hidden results are retained. API response blobs,
+  account cookies, X credentials, DMs, Google News and media files are not uploaded.
+- Viewing X bookmarks records bookmark provenance. The separate importer accepts
+  sanitized saved-post snapshots from the existing owner-checked acquisition
+  workflow. Feed sightings alone do not become bookmarks; partial snapshots do
+  not infer unsaves. This is bounded acquisition, not a complete account export.
+- The authenticated reader writes to an owner-scoped Noos archive using a dedicated
+  isolated database connection. Identity uses the issuer and immutable Ideaflow ID
+  subject. No archive is published to the generic public graph or community feed.
+  Deployment requires separate isolation and sign-in approval/verification.
+- Captured items and normalized observation snapshots persist until deleted; there
+  is no automatic 30-day expiry or 2,000-item durable limit in this fork. The local
+  pending queue is bounded to 500 observations and approximately 1.5 million JSON
+  characters; the popup reports dropped captures if it fills. Tokens remain in
+  local extension storage. Sign-out/opt-out clears pending uploads.
+- The reader logs request counts/status/timing, not post bodies. Phone feed
+  responses are network-only; only static app files are cached offline.
+- **Delete everything** removes your archive's posts and observations. Enabled
+  capture can save new posts afterward; turn it off to stop. Original X bookmarks
+  and posts are never changed by deletion or import here.
 
 ## Data Storage
 

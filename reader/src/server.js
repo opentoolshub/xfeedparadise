@@ -10,7 +10,7 @@ import { TokenError } from './jwt.js';
 
 const PUBLIC_DIR = fileURLToPath(new URL('../public/', import.meta.url));
 const VERSION = '0.1.0';
-const MAX_BODY = 512 * 1024;
+const MAX_BODY = 3 * 1024 * 1024;
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -172,6 +172,7 @@ export function createApp({ config, store, auth, log = line => console.log(line)
         issuer: config.issuer,
         extensionClientId: config.extensionClientIds[0] || null,
         readerUrl: config.publicOrigin,
+        archive: store.archive === true,
         limits: { batch: LIMITS.batch, perUser: config.perUser, ttlDays: config.ttlDays }
       });
     }
@@ -194,7 +195,8 @@ export function createApp({ config, store, auth, log = line => console.log(line)
         const cursor = q.get('cursor') || null;
         if (cursor && !decodeCursor(cursor)) throw new HttpError(400, 'bad cursor');
         const limit = Math.min(LIMITS.pageMax, Math.max(1, Number(q.get('limit')) || LIMITS.pageDefault));
-        const page = await store.list(user.sub, { minScore, kept, cursor, limit }, now());
+        const saved = q.get('saved') === 'true' ? true : null;
+        const page = await store.list(user.sub, { minScore, kept, saved, cursor, limit }, now());
         meta.count = page.items.length;
         return send(res, 200, page);
       }
@@ -204,13 +206,13 @@ export function createApp({ config, store, auth, log = line => console.log(line)
         if (!Array.isArray(body.items)) throw new HttpError(400, 'items must be an array');
         if (body.items.length > LIMITS.batch) throw new HttpError(413, `at most ${LIMITS.batch} items per request`);
         const t = now();
-        const byId = new Map();
+        const items = new Map();
         let rejected = 0;
         for (const raw of body.items) {
           const item = normalizeItem(raw, t);
-          if (item) byId.set(item.id, item); else rejected++;
+          if (item) items.set(JSON.stringify(item), item); else rejected++;
         }
-        const result = await store.upsert(user.sub, [...byId.values()], t);
+        const result = await store.upsert(user.sub, [...items.values()], t);
         meta.count = result.saved;
         return send(res, 200, { ...result, rejected });
       }

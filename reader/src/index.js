@@ -3,16 +3,16 @@ import { loadConfig } from './config.js';
 import { createApp } from './server.js';
 import { createAuth } from './oidc.js';
 import { createMemoryStore } from './store-memory.js';
-import { createPgStore } from './store-pg.js';
+import { createNoosStore } from './store-noos.js';
 
 const config = loadConfig();
 let store;
-if (config.databaseUrl) {
-  store = createPgStore({ connectionString: config.databaseUrl, perUser: config.perUser, ttlDays: config.ttlDays });
+if (config.noosUrl) {
+  store = createNoosStore({ baseUrl: config.noosUrl, secret: config.noosSecret, issuer: config.issuer });
 } else if (config.allowMemoryStore) {
-  store = createMemoryStore({ perUser: config.perUser, ttlDays: config.ttlDays });
+  store = createMemoryStore({ archive: true });
 } else {
-  throw new Error('DATABASE_URL is required (set READER_STORE=memory for a throwaway local run)');
+  throw new Error('NOOS_PARADISE_URL and NOOS_PARADISE_SECRET are required (READER_STORE=memory is disposable only)');
 }
 await store.init();
 
