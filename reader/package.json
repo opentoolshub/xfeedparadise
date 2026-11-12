@@ -1,0 +1,19 @@
+{
+  "name": "xfeed-paradise-reader",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private, per-user mobile reader for posts the XFeed Paradise extension scored (opt-in).",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test \"test/*.test.js\"",
+    "dev:issuer": "node dev/local-issuer.js"
+  },
+  "dependencies": {
+    "pg": "8.23.0"
+  }
+}
