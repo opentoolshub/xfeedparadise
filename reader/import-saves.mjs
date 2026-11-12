@@ -26,14 +26,22 @@ export async function importBookmarks({ snapshot, readerUrl, token, fetchImpl = 
   if (!token) throw Error('PARADISE_ID_TOKEN is required');
   const items = bookmarkItems(snapshot); // Validate the entire file before writing.
   let imported = 0;
-  for (let i = 0; i < items.length; i += 50) {
+  for (let i = 0; i < items.length;) {
+    const batch = [];
+    let bytes = 20;
+    for (const item of items.slice(i, i + 50)) {
+      const size = Buffer.byteLength(JSON.stringify(item)) + 1;
+      if (batch.length && bytes + size > 2500000) break;
+      batch.push(item); bytes += size;
+    }
     let response;
-    try { response = await fetchImpl(`${url.origin}/v1/items`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20000), headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ items: items.slice(i, i + 50) }) }); }
+    try { response = await fetchImpl(`${url.origin}/v1/items`, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(20000), headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ items: batch }) }); }
     catch { return { status: 'partial', imported, remaining: items.length - imported, uncertainBatch: true }; }
     if (!response.ok) return { status: 'partial', imported, remaining: items.length - imported, httpStatus: response.status };
     const result = await response.json();
     if (result.rejected) return { status: 'partial', imported, remaining: items.length - imported, rejected: result.rejected };
-    imported += Math.min(50, items.length - i);
+    imported += batch.length;
+    i += batch.length;
   }
   return { status: 'imported', imported, remaining: 0, sourceComplete: snapshot.complete === true };
 }

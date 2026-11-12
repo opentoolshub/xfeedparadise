@@ -129,6 +129,8 @@
       await local.set({ [KEYS.queue]: [...queue.values()] });
     }
     async function clearQueue() {
+      if (queueLoading) await queueLoading;
+      queue?.clear(); // invalidate a flush holding the previous Map
       queue = new Map();
       if (timer) clearTimer(timer);
       timer = null;
@@ -148,6 +150,7 @@
     async function enqueue(rawItems) {
       if (!(await active())) return { queued: 0 };
       const q = await loadQueue();
+      if (q !== queue || !(await active())) return { queued: 0 };
       let queued = 0;
       for (const raw of [].concat(rawItems)) {
         const item = toItem(raw);
@@ -232,7 +235,10 @@
 
     async function upload(items, token) {
       if (!(await readerConfig()).archive) throw new Error('This fork requires the Noos archive reader.');
-      return fetchImpl(`${await readerOrigin()}/v1/items`, {
+      const origin = await readerOrigin();
+      const [state, auth] = await Promise.all([getState(), getAuth()]);
+      if (!state.optIn || !state.account || auth?.idToken !== token) throw new Error('Capture stopped or account changed.');
+      return fetchImpl(`${origin}/v1/items`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
         body: JSON.stringify({ items })
@@ -246,16 +252,24 @@
       }
       const q = await loadQueue();
       while (q.size > 0) {
+        if (q !== queue || !(await active())) return;
         if (now() < retryAt) {
           schedule(0);
           return;
         }
         let token = await validToken();
+        if (q !== queue || !(await active())) return;
         if (!token) {
           await signedOut('Sign-in expired. Sign in again to keep syncing.');
           return;
         }
-        const batch = [...q.values()].slice(0, BATCH);
+        const batch = [];
+        let bytes = 20;
+        for (const item of q.values()) {
+          const size = new TextEncoder().encode(JSON.stringify(item)).length + 1;
+          if (batch.length && (batch.length >= BATCH || bytes + size > 2500000)) break;
+          batch.push(item); bytes += size;
+        }
         let res;
         try {
           res = await upload(batch, token);
@@ -266,6 +280,7 @@
         } catch {
           res = null;
         }
+        if (q !== queue || !(await active())) return;
         if (res && res.status === 401) {
           await signedOut('Sign-in expired. Sign in again to keep syncing.');
           return;
@@ -341,6 +356,7 @@
 
     async function signOut() {
       const auth = await getAuth();
+      await signedOut(null);
       if (auth && auth.refreshToken) {
         try {
           const cfg = await readerConfig();
@@ -356,7 +372,6 @@
           // Best effort; local tokens are removed regardless.
         }
       }
-      await signedOut(null);
       return getState();
     }
 

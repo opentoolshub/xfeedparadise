@@ -333,3 +333,28 @@ test('concurrent first raw capture and classification do not overwrite each othe
   await c.advance(8000);
   assert.equal(JSON.parse(uploads()[0].body).items.length, 2);
 });
+
+
+test('opt-out during an in-flight batch clears the old queue and prevents the next batch', async () => {
+  let release;
+  const s = setup({ local: signedIn(), handler: () => new Promise(resolve => { release = resolve; }) });
+  await s.sync.enqueue(Array.from({ length: 70 }, (_, i) => post(i)));
+  const sending = s.sync.flush();
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  await s.sync.setOptIn(false);
+  release(json(200, { saved: 50, total: 50 }));
+  await sending;
+  assert.equal(s.uploads().length, 1);
+  assert.equal((await s.sync.status()).pending, 0);
+  assert.equal((await s.sync.status()).optIn, false);
+});
+
+
+test('long Unicode captures split by encoded bytes as well as item count', async () => {
+  const s = setup({ local: signedIn() });
+  await s.sync.enqueue(Array.from({ length: 30 }, (_, i) => ({ ...post(i), text: '界'.repeat(40000) })));
+  await s.sync.flush();
+  assert.equal(s.uploads().reduce((n, x) => n + JSON.parse(x.body).items.length, 0), 30);
+  assert.ok(s.uploads().every(x => Buffer.byteLength(x.body) < 3 * 1024 * 1024));
+  assert.ok(s.uploads().length > 1);
+});
