@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>Filtered feed · Demo — Paradise Reader</title>
+  <meta property="og:title" content="Try Paradise Reader">
+  <meta property="og:description" content="An interactive demo: capture posts, adjust your filter, explore the originals and keep your saves. Fictional sample posts; no sign-in needed.">
+  <meta property="og:image" content="https://opentoolshub.github.io/xfeedparadise/demo/icon.png">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="__ICON__">
+  <style>/* __READER_CSS__ */</style>
+  <style>/* __DEMO_CSS__ */</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="demo-header">
+      <div class="topbar-row">
+        <div class="brand"><img class="brand-mark" src="__ICON__" width="28" height="28" alt=""><span class="brand-name">Paradise Reader</span><span class="demo-badge">Demo</span></div>
+        <button class="icon-btn about-button" id="aboutBtn" aria-label="About this demo" type="button">?</button>
+      </div>
+      <p class="demo-note">Sample posts. Your changes stay in this browser.</p>
+      <nav class="segmented demo-tabs" aria-label="Feed views">
+        <button class="seg" type="button" data-view="filtered" aria-pressed="true">Filtered</button>
+        <button class="seg" type="button" data-view="all" aria-pressed="false">All captured</button>
+        <button class="seg" type="button" data-view="saved" aria-pressed="false">Saves</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="demo-main">
+    <section class="demo-tools" aria-label="Try the archive">
+      <div class="demo-counts" aria-live="polite">
+        <span><strong id="capturedCount">0</strong> captured</span><span><strong id="keptCount">0</strong> kept</span><span><strong id="savedCount">0</strong> saved</span>
+      </div>
+      <label class="demo-threshold" for="threshold"><span>Keep scores at or above <output id="thresholdValue">0</output></span><input id="threshold" type="range" min="-100" max="100" step="5" value="0" aria-label="Keep scores at or above"></label>
+      <p class="threshold-help" id="thresholdHelp">Move the threshold. Original posts stay in All captured.</p>
+      <div class="demo-actions"><button type="button" class="demo-button primary" id="captureBtn">Capture next sample</button><button type="button" class="demo-button" id="pasteBtn">Try your own text</button></div>
+      <div class="demo-search"><label class="sr-only" for="search">Search captured posts</label><input id="search" type="search" placeholder="Search posts or authors" autocomplete="off"></div>
+    </section>
+
+    <div class="status" id="notice" role="status" hidden></div>
+    <section aria-labelledby="viewTitle">
+      <div class="feed-heading"><h1 id="viewTitle">Your filtered feed</h1><span id="viewCount"></span></div>
+      <p class="view-help" id="viewHelp">Kept by your current filter. Every original is still in the archive.</p>
+      <ol class="feed" id="feed"></ol>
+      <div class="empty" id="empty" hidden><h2 id="emptyTitle">No matching posts</h2><p id="emptyCopy">Lower the threshold or try All captured.</p><button class="demo-button" id="showAllBtn" type="button">Show all captured</button></div>
+    </section>
+
+    <details class="activity"><summary>Recent capture activity <span id="activityCount"></span></summary><ol id="activityList"></ol></details>
+    <section class="demo-import" aria-label="Try bookmark import"><h2>Bring in your saves</h2><p>Import a sample bookmark batch. A tweet already in the feed is saved once, with both sources preserved.</p><div class="demo-actions"><button type="button" class="demo-button" id="importSampleBtn">Load sample bookmarks</button><button type="button" class="demo-button" id="importFileBtn">Import saved-post file</button></div><input type="file" id="importFile" accept="application/json,.json" hidden><p class="fine-print">Optional: a sanitized Bloomscroll <span class="contract-name">x-saved</span> JSON snapshot. Read locally; no account connection.</p></section>
+    <footer class="demo-footer"><span>Originals → filtering history → your feed</span><button type="button" id="resetBtn">Reset demo</button></footer>
+  </main>
+
+  <dialog class="sheet" id="pasteSheet" aria-labelledby="pasteTitle"><form id="pasteForm" class="sheet-body"><div class="sheet-head"><h2 class="sheet-title" id="pasteTitle">Try your own text</h2><button type="button" class="icon-btn" data-close aria-label="Close">✕</button></div><p class="sheet-copy">Paste a post to capture and score it with Paradise’s local keyword filter. Nothing is sent to an AI service or Noos.</p><label for="postText">Post text</label><textarea id="postText" rows="6" maxlength="4000" required placeholder="Paste a tweet, an idea, or a post here…"></textarea><label for="postUrl">X post link <span class="optional">(optional)</span></label><input id="postUrl" type="url" placeholder="https://x.com/name/status/…"><label class="save-check"><input id="postSave" type="checkbox"> Add to Saves</label><p id="pasteError" class="field-error" role="alert" hidden></p><button class="demo-button primary" type="submit">Capture and score</button></form></dialog>
+  <dialog class="sheet" id="aboutSheet" aria-labelledby="aboutTitle"><div class="sheet-body"><div class="sheet-head"><h2 class="sheet-title" id="aboutTitle">A demo you can use</h2><button type="button" class="icon-btn" data-close aria-label="Close">✕</button></div><p class="sheet-copy">These initial posts and authors are fictional. This demo uses the extension’s real local keyword scorer, so it is useful to try the flow, but it is not a judgment of a post’s truth or quality.</p><p class="sheet-copy">Try the threshold, open Capture history, save a post, paste your own text, or import a saved-post snapshot. Reloading keeps your demo on this browser. Reset removes it.</p><p class="sheet-copy">This page does not connect to X, Ideaflow ID or a live Noos database. The production fork uses those services; this preview lets you try the reader now.</p><button class="demo-button" type="button" data-close>Back to the demo</button></div></dialog>
+  <dialog class="sheet" id="resetSheet" aria-labelledby="resetTitle"><div class="sheet-body"><h2 class="sheet-title" id="resetTitle">Reset this demo?</h2><p class="sheet-copy">This removes your pasted posts, imported snapshots and local demo changes, then restores the fictional samples.</p><button class="demo-button danger" type="button" id="confirmResetBtn">Reset demo</button><button class="demo-button" type="button" data-close>Keep my demo</button></div></dialog>
+  <script>/* __SCORER__ */</script>
+  <script>/* __DEMO_JS__ */</script>
+</body>
+</html>
