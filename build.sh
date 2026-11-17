@@ -26,6 +26,7 @@ rm -f "$OUTPUT"
 # Package only files required by manifest.json; never bundle old ZIPs or plans.
 zip -r "$OUTPUT" manifest.json popup.html popup.js background.js \
   content.js content-googlenews.js mobile.js providers.js filter.js db.js styles.css \
+  secretary.js secretary-ui.js secretary.css \
   icons/icon16.png icons/icon48.png icons/icon128.png
 
 # Show result

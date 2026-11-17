@@ -36,15 +36,42 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://twitter.com/*", "https://x.com/*"],
-      "js": ["mobile.js", "db.js", "providers.js", "filter.js", "content.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://twitter.com/*",
+        "https://x.com/*"
+      ],
+      "js": [
+        "mobile.js",
+        "db.js",
+        "providers.js",
+        "filter.js",
+        "content.js",
+        "secretary.js",
+        "secretary-ui.js"
+      ],
+      "css": [
+        "styles.css",
+        "secretary.css"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://news.google.com/*"],
-      "js": ["mobile.js", "db.js", "providers.js", "filter.js", "content-googlenews.js"],
-      "css": ["styles.css"],
+      "matches": [
+        "https://news.google.com/*"
+      ],
+      "js": [
+        "mobile.js",
+        "db.js",
+        "providers.js",
+        "filter.js",
+        "content-googlenews.js",
+        "secretary.js",
+        "secretary-ui.js"
+      ],
+      "css": [
+        "styles.css",
+        "secretary.css"
+      ],
       "run_at": "document_idle"
     }
   ],

@@ -5,6 +5,7 @@
 // The default provider is the built-in scoring service (no key, daily cap).
 
 import './providers.js';
+import './secretary.js';
 
 const Providers = globalThis.XFPProviders;
 
@@ -130,4 +131,25 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete') {
     updateBadge(tabId);
   }
+});
+
+// All queue writes run through one worker-owned serial writer; never page storage.
+
+const secretary = globalThis.XFPSecretary.createService(chrome.storage.local);
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (message?.type !== 'XFP_SECRETARY') return false;
+  // Extension pages or our declared public-feed content scripts only. Never DMs/private browsing.
+  const source = sender.url || '';
+  let allowed = sender.id === chrome.runtime.id && !sender.tab?.incognito;
+  if (sender.tab) {
+    try {
+      const url = new URL(source);
+      allowed = allowed && ['x.com', 'twitter.com', 'news.google.com'].includes(url.hostname) &&
+        !/^\/(messages|i\/chat|i\/direct_messages)(\/|$)/.test(url.pathname) &&
+        message.action !== 'clear';
+    } catch { allowed = false; }
+  }
+  if (!allowed) { respond({ error: 'Queue unavailable on this page' }); return false; }
+  secretary(message).then(respond).catch(error => respond({ error: error.message }));
+  return true;
 });

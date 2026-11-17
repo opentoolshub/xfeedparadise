@@ -419,9 +419,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Clear IndexedDB via content script
       await sendToContentScript({ type: 'CLEAR_DATA' });
       // Also clear local storage as backup (the install ID is settings, not data)
-      const kept = await chrome.storage.local.get(XFPProviders.INSTALL_ID_KEY);
-      await chrome.storage.local.clear();
-      await chrome.storage.local.set(kept);
+      const localData = await chrome.storage.local.get(null);
+      // Later has its own serial writer and explicit deletion control.
+      const protectedKeys = [XFPProviders.INSTALL_ID_KEY, 'xfpSecretaryV1'];
+      await chrome.storage.local.remove(Object.keys(localData).filter(key => !protectedKeys.includes(key)));
       updateStats();
       updateHiddenTweetsList();
     }

@@ -69,3 +69,27 @@ https://github.com/opentoolshub/xfeedparadise/issues
 
 This extension is open source. You can review all code at:
 https://github.com/opentoolshub/xfeedparadise
+
+
+## Later queue
+
+Later explicitly saves only selected X/Twitter or Google News source URLs,
+short titles, optional reasons, importance, timing and item revisions in
+`storage.local` at the extension origin. No automatic feed archive, DOM HTML,
+media, credentials, private messages or queue network transfer is added. Existing
+AI scoring behavior described above remains separate. A source-page script cannot
+inspect the closed Later panel; explicitly requested digest links and collapsed
+rows appear in the source page's DOM and are visible to that site.
+
+The queue is bounded to 500 retained items (including Saved and Done) and 2 MiB.
+Quota failures leave the original card visible. Done metadata expires after 30
+days; active saves persist until removed. Individual removal strips title, URL,
+reason and timing, retaining only a source ID and revision tombstone to prevent
+stale operations from recreating it (up to 2,500 retained IDs). Operation IDs are
+bounded to the latest 1,000 writes. Export offers the local JSON to you; it does
+not upload it. **Delete all Later data** removes all items/tombstones, while
+retaining window preferences and bounded operation IDs for duplicate suppression.
+The separate **Clear stored data** control clears legacy tweet/cache data and
+leaves Later for its own explicit deletion control. No queue data is captured
+from incognito tabs or secretary messaging routes. Reminders run only while the
+extension can execute; no background or lock-screen delivery guarantee is made.

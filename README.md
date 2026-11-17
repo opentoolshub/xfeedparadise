@@ -167,3 +167,38 @@ MIT
 ---
 
 *Transform your timeline. Raise your vibe.* 🌴
+
+
+## Later secretary
+
+On supported X/Twitter posts and Google News article cards, choose **Later** to
+save a source link and short text metadata in this browser's extension storage.
+Choose the delivery window (Friday 15:00–17:00 local by default), Tonight, an
+explicit break end, or a custom local time. Saving must succeed before a card
+collapses. **Show now** reveals it without completing it; **Remove / Undo** cancels
+its deferral. Bulk filtering does not populate Later.
+
+The Later panel has a review digest and Ready / Scheduled / Saved / Done lists.
+Opening a link never marks it done. Reschedule, keep saved, finish or remove items
+explicitly. Importance pins an item in the digest; it does not imply urgency.
+Only an explicit urgent reason and deadline within 24 hours bypass quiet windows.
+Default quiet time is 09:00–12:00 and 21:30 through the following morning (09:00).
+Delivery must be configured outside quiet time. Window settings use device local
+time; recurring review follows local time when traveling, while custom reminders
+retain their absolute instant. Invalid daylight-saving wall times move to the
+first valid minute, and repeated times use their first occurrence.
+
+While a page is open, the small Later cue reconciles at most once per minute and
+on foreground/storage changes. **Show ready in feed** inserts up to three labeled
+source links at a recognized article boundary, only on request, with the panel as
+fallback. It does not restore native interactive cards or alter server ranking.
+No scrolling, focus stealing, playback interruption or automatic card expansion
+is required when items become ready. These are in-browser reminders, not OS/push
+notifications: suspended/closed browsers reconcile at next open. Missed review
+windows wait for the next delivery window.
+
+This increment does not include YouTube/Instagram adapters or change existing AI
+scoring settings. Secretary controls are disabled on X messaging routes and in
+incognito tabs; this does not claim changes to legacy scoring/messaging behavior.
+Safari resource assembly is tested, but actual Safari/iOS storage quotas, private
+browsing, live layouts and lifecycle need device validation before distribution.
