@@ -55,16 +55,22 @@
       const urgent = input('Truly urgent — bypass quiet hours until deadline', 'checkbox', form);
       const urgentReason = input('Urgent reason (required for bypass)', 'text', form); urgentReason.maxLength = 200;
       const deadline = input('Urgent deadline (within 24 hours)', 'datetime-local', form);
+      function localInput(value) {
+        const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+        if (!match) return NaN;
+        return +XFPSecretary.localTime(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]) * 60 + Number(match[5]));
+      }
       function resolve() {
         if (choice.value === 'review') return XFPSecretary.nextReview(Date.now(), snapshot.config);
         if (choice.value === 'tonight') { const d = new Date(); d.setHours(20, 0, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return +d; }
-        return +new Date(custom.value);
+        return localInput(custom.value);
       }
       function preview() {
         const due = resolve(); dueLabel.textContent = Number.isFinite(due) ? 'Target: ' + dateText(due) + '. Quiet windows delay presentation; missed review windows wait for the next delivery window.' : 'Choose an explicit date and time.';
+        if (urgent.checked && Number.isFinite(localInput(deadline.value))) dueLabel.textContent += ' Urgent bypass deadline: ' + dateText(localInput(deadline.value)) + '.';
         custom.required = ['custom', 'break'].includes(choice.value);
       }
-      choice.addEventListener('change', preview); custom.addEventListener('input', preview); preview();
+      choice.addEventListener('change', preview); custom.addEventListener('input', preview); urgent.addEventListener('change', preview); deadline.addEventListener('input', preview); preview();
       const save = el('button', 'Save for later', form, { type: 'submit' });
       form.onsubmit = async event => {
         event.preventDefault(); save.disabled = true;
@@ -72,7 +78,7 @@
           const due = resolve();
           await change('save', item, { title: item.title, scheduleKind: choice.value === 'review' ? 'review' : 'instant', dueAtUtc: due,
             importance: important.checked, reason: reason.value,
-            urgentRequested: urgent.checked, urgentReason: urgent.checked ? urgentReason.value : '', urgentUntil: urgent.checked ? +new Date(deadline.value) : 0,
+            urgentRequested: urgent.checked, urgentReason: urgent.checked ? urgentReason.value : '', urgentUntil: urgent.checked ? localInput(deadline.value) : 0,
             timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
           tell('Saved for ' + dateText(due) + ' · local to this browser. Remove to undo.');
           form.hidden = true; selected = null;
