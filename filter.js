@@ -24,6 +24,7 @@ const VibeFilter = {
   // usingName is the provider now scoring, or null when keywords take over.
   onRateLimit: null,
   onApiError: null,
+  onScoreRefined: null,
 
   // Provider configuration summary (no keys kept here)
   provider: {
@@ -78,7 +79,7 @@ const VibeFilter = {
     }
 
     // Skip if already cached with AI score
-    const cached = this.scoreCache.get(tweetId);
+    const cached = this.getCachedScore(tweetId, text);
     if (cached && cached.source === 'ai') return;
 
     this.batchQueue.push({ tweetId, text, callback });
@@ -151,7 +152,7 @@ const VibeFilter = {
           const finalScore = Math.round(aiScore * 0.85 + keywordScore * 0.15);
           const clampedScore = Math.max(-100, Math.min(100, finalScore));
 
-          this.scoreCache.set(item.tweetId, {
+          this.cacheScore(item.tweetId, item.text, {
             score: clampedScore,
             source: 'ai',
             api: result.provider,
@@ -161,6 +162,7 @@ const VibeFilter = {
           this.debug(`Tweet ${item.tweetId}: AI=${aiScore}, Final=${clampedScore} (${result.providerName})`);
           if (item.callback) item.callback(clampedScore, 'ai');
         });
+        if (result.scores.some(score => score != null)) this.onScoreRefined?.();
       } else {
         // Every configured provider failed: keywords for this batch, then pause.
         this.aiPausedUntil = Date.now() + Math.min((result && result.retryAfterMs) || 30000, 5 * 60 * 1000);
@@ -175,7 +177,7 @@ const VibeFilter = {
   scoreWithKeywords(batch) {
     for (const { tweetId, text, callback } of batch) {
       const keywordScore = this.calculateKeywordScore(text);
-      this.scoreCache.set(tweetId, { score: keywordScore, source: 'keyword', timestamp: Date.now() });
+      this.cacheScore(tweetId, text, { score: keywordScore, source: 'keyword', timestamp: Date.now() });
       if (callback) callback(keywordScore, 'keyword');
     }
   },
@@ -338,16 +340,25 @@ const VibeFilter = {
     return Math.max(-100, Math.min(100, score));
   },
 
+  // A recycled card can keep its ID while X hydrates or edits its text.
+  getCachedScore(tweetId, text) {
+    return this.scoreCache.get(JSON.stringify([tweetId, text]));
+  },
+
+  cacheScore(tweetId, text, score) {
+    this.scoreCache.set(JSON.stringify([tweetId, text]), score);
+  },
+
   // Get instant score and queue for AI refinement
   getScoreWithRefinement(tweetId, text, onUpdate) {
-    const cached = this.scoreCache.get(tweetId);
+    const cached = this.getCachedScore(tweetId, text);
     if (cached) {
       this.debug(`Cache hit: ${tweetId} = ${cached.score} (${cached.source})`);
       return { score: cached.score, source: cached.source };
     }
 
     const keywordScore = this.calculateKeywordScore(text);
-    this.scoreCache.set(tweetId, { score: keywordScore, source: 'keyword', timestamp: Date.now() });
+    this.cacheScore(tweetId, text, { score: keywordScore, source: 'keyword', timestamp: Date.now() });
 
     if (this.settings.useAI && this.hasAI()) {
       this.queueForAIScoring(tweetId, text, onUpdate);

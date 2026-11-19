@@ -4,6 +4,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load current settings
   const settings = await loadSettings();
 
+  let contextSettings = await XFPContext.loadPreferences();
+  const updateContextSettings = XFPContext.mountSettings(document.getElementById('contextSettings'), contextSettings);
+  XFPContext.watchPreferences(changes => {
+    contextSettings = XFPContext.applyPreferences(contextSettings, changes);
+    updateContextSettings(contextSettings);
+  });
+
   // Initialize UI with current settings
   document.getElementById('enableToggle').checked = settings.enabled;
   document.getElementById('thresholdSlider').value = settings.threshold;
@@ -527,6 +534,7 @@ async function updateHiddenTweetsList() {
             <div class="hidden-tweet-meta">
               <span>${tweet.vibeLabel}</span>
               <span>Score: ${tweet.score}</span>
+              ${tweet.contextLabel ? `<span>${escapeHtml(tweet.contextLabel)}</span>` : ''}
             </div>
           </div>
         `).join('');

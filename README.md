@@ -4,6 +4,12 @@ A Chrome extension that transforms your X/Twitter feed into a paradise of uplift
 
 ## Features
 
+### Version 1.5.0
+
+- **Where to filter on X** in the popup and floating panel controls how filtering works in profiles, threads you are in, search, notifications, and bookmarks. By default, filtering pauses on your profile and bookmarks. In conversations you participate in, search, notifications, and other profiles, Hide and Collapse produce an in-place disclosure. Dim keeps dimming and reports the number dimmed.
+- **Show** reveals one post for the current tab until page reload. **Show all** reveals posts for the current visit, including new arrivals. **Always show** saves a context preference. The banner and palm button reflect activity on the current page.
+- Your posts and reposts are protected by default. The focal post and its ancestors stay visible in conversation views. The extension pauses filtering in DMs, composers, and media viewers.
+
 ### Version 1.4.1
 - **Safari on iPhone, iPad and Mac**: a Safari Web Extension build lives in `safari/` (see `safari/README.md`); touch-friendly panel, tap-to-reveal for dimmed posts
 - **Fix**: changing the filter mode or threshold on X no longer un-filters visible posts until reload

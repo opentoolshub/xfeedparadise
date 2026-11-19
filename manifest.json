@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XFeed Paradise",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "description": "AI-powered feed filter that surfaces uplifting content and hides outrage-bait",
   "homepage_url": "https://github.com/opentoolshub/xfeedparadise",
   "permissions": [
@@ -45,6 +45,7 @@
         "db.js",
         "providers.js",
         "filter.js",
+        "page-context.js",
         "content.js",
         "secretary.js",
         "secretary-ui.js"
