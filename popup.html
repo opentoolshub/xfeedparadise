@@ -792,6 +792,29 @@
     .gear-btn-prominent.expanded svg {
       transform: rotate(90deg);
     }
+
+    .context-settings {
+      border: 1px solid #58566d;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin: 0 0 12px;
+    }
+
+    .context-settings label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+    }
+
+    .context-settings select {
+      background: #242038;
+      color: #f5f2fc;
+      border: 1px solid #77728d;
+      border-radius: 4px;
+      padding: 3px 6px;
+    }
   </style>
   <style>
     /* Safari on iPhone/iPad shows the popup as a full-width sheet. */
@@ -860,6 +883,10 @@
           <button class="mode-btn" data-mode="label">Collapse</button>
         </div>
       </div>
+
+      <fieldset id="contextSettings" class="context-settings">
+        <legend>Where to filter on X</legend>
+      </fieldset>
 
       <!-- Threshold -->
       <div class="section" style="margin-bottom: 12px;">
@@ -1039,11 +1066,12 @@ Consider: Is it constructive? Informative? Does it spark joy or outrage?"></text
 
       <!-- Clear Data -->
       <button class="clear-btn" id="clearData">Clear stored data</button>
-      <div id="versionLabel" style="margin-top: 12px; color: #64748b; font-size: 11px; text-align: center;">XFeed Paradise v1.4.1</div>
+      <div id="versionLabel" style="margin-top: 12px; color: #64748b; font-size: 11px; text-align: center;">XFeed Paradise v1.5.0</div>
     </div>
   </div>
 
   <script src="providers.js"></script>
+  <script src="page-context.js"></script>
   <script src="popup.js"></script>
   <script src="secretary.js"></script>
   <script src="secretary-ui.js"></script>

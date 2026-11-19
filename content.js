@@ -21,6 +21,7 @@
   // Wait for dependencies
   await window.tweetDB.ready;
   await VibeFilter.loadSettings();
+  Object.assign(VibeFilter.settings, await XFPContext.loadPreferences());
   await VibeFilter.loadProviderConfig();
 
   // AI scoring state - the configured provider(s) score via the background worker
@@ -63,12 +64,58 @@
     initAIScorer();
   }
 
-  // Track processed tweets to avoid duplicates
+  const { selectors } = XFPContext;
   const processedTweets = new Set();
-
-  // Track hidden tweets with their info
+  const cards = new Map();
+  const revealedIds = new Set();
+  const countedIds = new Set();
+  const hiddenTweets = [];
   let hiddenCount = 0;
-  const hiddenTweets = []; // Array of { id, text, author, score, url }
+  let pageHidden = 0;
+  let pageDimmed = 0;
+  let pageRevealAll = false;
+  let route = '';
+  let context = { kind: 'feed' };
+  let viewer = null;
+  let accountHint = null;
+  let cachedViewer = null;
+  let warnedMissingTweets = false;
+
+  try {
+    cachedViewer = XFPContext.handle((await chrome.storage.local.get('xfp_me')).xfp_me);
+  } catch {
+    // A local storage failure still leaves DOM identity probes available.
+  }
+
+  function refreshViewer() {
+    const probe = XFPContext.probeViewer(document, location.pathname);
+    const accountChanged = probe.account && (accountHint
+      ? accountHint !== probe.account
+      : cachedViewer && cachedViewer !== probe.account && probe.handle !== probe.account);
+    if (probe.account) accountHint = probe.account;
+    if (accountChanged) viewer = probe.account;
+    else if (probe.handle && (!probe.account || probe.handle === probe.account || viewer !== probe.account)) {
+      viewer = probe.handle;
+    }
+    const signedOut = /^\/(login|logout|i\/flow\/login)(?:\/|$)/i.test(location.pathname) ||
+      !!document.querySelector('[data-testid="loginButton"]') && !probe.handle;
+    if (signedOut) {
+      viewer = null;
+      accountHint = null;
+      if (cachedViewer) {
+        cachedViewer = null;
+        chrome.storage.local.remove('xfp_me').catch(() => {});
+      }
+      return;
+    }
+    viewer ||= cachedViewer;
+    if (viewer && viewer !== cachedViewer) {
+      cachedViewer = viewer;
+      chrome.storage.local.set({ xfp_me: viewer }).catch(() => {});
+    }
+  }
+
+  const routeKey = () => location.pathname + location.search;
 
   // Toast notification system
   let toastTimeout = null;
@@ -130,323 +177,449 @@
     showToast(`${apiName} ${problem}. ${using}; check the extension popup.`, 'warning', 6000);
   };
 
-  // IntersectionObserver for viewport detection - catches fast scrolling & recycled elements
-  const viewportObserver = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        const article = entry.target;
-        // Process if not already done
-        if (!article.dataset.xfpProcessed) {
-          processTweet(article);
-        }
-      }
-    }
-  }, {
-    root: null, // viewport
-    rootMargin: '200px', // pre-process 200px before entering viewport
-    threshold: 0
-  });
-
-  // Get current user's handle (feed owner)
-  function getFeedOwner() {
-    // Try to get from the page
-    const accountSwitcher = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
-    if (accountSwitcher) {
-      const spans = accountSwitcher.querySelectorAll('span');
-      for (const span of spans) {
-        if (span.textContent.startsWith('@')) {
-          return span.textContent.slice(1);
-        }
-      }
-    }
-    return 'unknown';
+  function extractTweetData(article, identity, isOwn) {
+    const authorHandle = identity.author || 'unknown';
+    const displayName = article.querySelector(selectors.author)?.querySelector('span')?.textContent || authorHandle;
+    const timestamp = identity.time?.dateTime ? Date.parse(identity.time.dateTime) : Date.now();
+    const getMetric = testId => {
+      const text = article.querySelector(`[data-testid="${testId}"]`)?.textContent || '';
+      return parseInt(text.replace(/[^0-9]/g, ''), 10) || 0;
+    };
+    return {
+      id: identity.id,
+      source: 'twitter',
+      text: article.querySelector(selectors.text)?.textContent || '',
+      authorId: authorHandle,
+      authorName: displayName,
+      authorAvatar: article.querySelector('img[src*="profile_images"]')?.src || '',
+      timestamp,
+      feedOwner: viewer || 'unknown',
+      metrics: { replies: getMetric('reply'), retweets: getMetric('retweet'), likes: getMetric('like') },
+      media: {
+        hasImage: !!article.querySelector('[data-testid="tweetPhoto"]'),
+        hasVideo: !!article.querySelector('[data-testid="videoPlayer"]'),
+        hasQuote: !!article.querySelector(selectors.quote)
+      },
+      isRetweet: !!article.querySelector(selectors.repost),
+      isOwn,
+      url: `https://x.com/${authorHandle}/status/${identity.id}`,
+      collectedAt: Date.now()
+    };
   }
 
-  // Extract tweet data from a tweet element
-  function extractTweetData(tweetElement) {
-    try {
-      // Get tweet article
-      const article = tweetElement.closest('article[data-testid="tweet"]');
-      if (!article) return null;
+  function setText(element, text) {
+    if (element.textContent !== text) element.textContent = text;
+  }
 
-      // Extract tweet ID from link
-      const tweetLink = article.querySelector('a[href*="/status/"]');
-      const tweetId = tweetLink?.href?.match(/status\/(\d+)/)?.[1];
-      if (!tweetId) return null;
+  function isInViewport(article) {
+    const rect = article.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 &&
+      rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth;
+  }
 
-      // Extract author info
-      const authorLink = article.querySelector('a[href^="/"][role="link"]:not([href*="/status/"])');
-      const authorHandle = authorLink?.href?.split('/').pop() || 'unknown';
-
-      const displayNameEl = article.querySelector('[data-testid="User-Name"]');
-      const displayName = displayNameEl?.querySelector('span')?.textContent || authorHandle;
-
-      // Get author avatar
-      const avatarImg = article.querySelector('img[src*="profile_images"]');
-      const avatarUrl = avatarImg?.src || '';
-
-      // Extract tweet text
-      const tweetTextEl = article.querySelector('[data-testid="tweetText"]');
-      const tweetText = tweetTextEl?.textContent || '';
-
-      // Extract timestamp
-      const timeEl = article.querySelector('time');
-      const timestamp = timeEl?.dateTime ? new Date(timeEl.dateTime).getTime() : Date.now();
-
-      // Extract engagement metrics
-      const getMetric = (testId) => {
-        const el = article.querySelector(`[data-testid="${testId}"]`);
-        const text = el?.textContent || '0';
-        return parseInt(text.replace(/[^0-9]/g, '')) || 0;
-      };
-
-      const replyCount = getMetric('reply');
-      const retweetCount = getMetric('retweet');
-      const likeCount = getMetric('like');
-
-      // Check for media
-      const hasImage = !!article.querySelector('[data-testid="tweetPhoto"]');
-      const hasVideo = !!article.querySelector('[data-testid="videoPlayer"]');
-      const hasQuote = !!article.querySelector('[data-testid="quoteTweet"]');
-
-      // Check if it's a retweet
-      const isRetweet = !!article.querySelector('[data-testid="socialContext"]')?.textContent?.includes('reposted');
-
-      // Build tweet object
-      const tweet = {
-        id: tweetId,
-        source: 'twitter', // Identify source for database filtering
-        text: tweetText,
-        authorId: authorHandle,
-        authorName: displayName,
-        authorAvatar: avatarUrl,
-        timestamp,
-        feedOwner: getFeedOwner(),
-        metrics: {
-          replies: replyCount,
-          retweets: retweetCount,
-          likes: likeCount
-        },
-        media: {
-          hasImage,
-          hasVideo,
-          hasQuote
-        },
-        isRetweet,
-        url: `https://x.com/${authorHandle}/status/${tweetId}`,
-        collectedAt: Date.now()
-      };
-
-      return tweet;
-    } catch (error) {
-      console.error('XFeed Paradise: Error extracting tweet:', error);
-      return null;
+  function applyScoreBadge(article, card, vibeLabel) {
+    if (!VibeFilter.settings.enabled || !VibeFilter.settings.showScores) {
+      card.badge?.remove();
+      article.classList.remove('xfp-vibe-position');
+      return;
     }
+    if (!card.badge) {
+      card.badge = document.createElement('div');
+      card.badge.dataset.xfpUi = '';
+    }
+    if (card.badge.parentElement !== article) article.prepend(card.badge);
+    card.badge.className = `xfp-vibe-indicator ${vibeLabel.class}`;
+    setText(card.badge, `${vibeLabel.label} (${card.score})`);
+    article.classList.add('xfp-vibe-position');
   }
 
-  // Check if we're on a tweet detail page
-  function isOnTweetDetailPage() {
-    return /\/status\/\d+/.test(window.location.pathname);
+  function relativeTime(timestamp) {
+    const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (!Number.isFinite(minutes)) return '';
+    if (minutes < 1) return 'Now';
+    if (minutes < 60) return `${minutes}m`;
+    if (minutes < 1440) return `${Math.floor(minutes / 60)}h`;
+    return `${Math.floor(minutes / 1440)}d`;
   }
 
-  // Get the tweet ID from the current URL (if on detail page)
-  function getTweetIdFromUrl() {
-    const match = window.location.pathname.match(/\/status\/(\d+)/);
-    return match ? match[1] : null;
-  }
-
-  // Apply filter to a tweet element
-  function applyFilter(article, tweet, score) {
-    if (!VibeFilter.settings.enabled) return;
-
-    const shouldShow = VibeFilter.shouldShow(score);
-    const vibeLabel = VibeFilter.getVibeLabel(score);
-
-    // Don't hide the main tweet if user navigated directly to it
-    const urlTweetId = getTweetIdFromUrl();
-    if (urlTweetId) {
-      // Check if this is the main tweet by ID match OR by being the first tweet on page
-      const allTweets = document.querySelectorAll('article[data-testid="tweet"]');
-      const isFirstTweet = allTweets[0] === article;
-      const isIdMatch = tweet.id === urlTweetId;
-
-      if (isIdMatch || isFirstTweet) {
-        // Still show the score badge, but never hide
-        if (VibeFilter.settings.showScores) {
-          article.querySelector('.xfp-vibe-indicator')?.remove();
-          const indicator = document.createElement('div');
-          indicator.className = `xfp-vibe-indicator ${vibeLabel.class}`;
-          indicator.innerHTML = `${vibeLabel.label} (${score})`;
-          article.style.position = 'relative';
-          article.prepend(indicator);
+  function renderStub(article, card, vibeLabel, presentation) {
+    if (!card.row) {
+      const row = document.createElement('div');
+      row.className = 'xfp-stub';
+      row.dataset.xfpUi = '';
+      row.setAttribute('role', 'group');
+      const label = document.createElement('span');
+      const button = document.createElement('button');
+      button.type = 'button';
+      row.append(label, button);
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        if (route !== routeKey() || cards.get(article) !== card ||
+            XFPContext.tweetIdentity(article)?.id !== card.tweet.id) return;
+        const wasCollapsed = card.presentation === 'stub';
+        card.revealAnimation?.cancel();
+        if (wasCollapsed) {
+          revealedIds.add(card.tweet.id);
+        } else {
+          revealedIds.delete(card.tweet.id);
+          card.keepVisible = false;
         }
-        return; // Don't apply any hiding/dimming
-      }
-    }
-
-    // Remove any existing vibe indicators
-    article.querySelector('.xfp-vibe-indicator')?.remove();
-
-    // Add score indicator if enabled
-    if (VibeFilter.settings.showScores) {
-      const indicator = document.createElement('div');
-      indicator.className = `xfp-vibe-indicator ${vibeLabel.class}`;
-      indicator.innerHTML = `${vibeLabel.label} (${score})`;
-      article.style.position = 'relative';
-      article.prepend(indicator);
-    }
-
-    // Apply filter mode
-    if (!shouldShow) {
-      const container = article.closest('[data-testid="cellInnerDiv"]');
-      const wasAlreadyHidden = container?.classList.contains('xfp-hidden') ||
-                               container?.classList.contains('xfp-dimmed') ||
-                               container?.classList.contains('xfp-labeled');
-
-      switch (VibeFilter.settings.filterMode) {
-        case 'hide':
-          container?.classList.add('xfp-hidden');
-          break;
-        case 'dim':
-          container?.classList.add('xfp-dimmed');
-          break;
-        case 'label':
-          container?.classList.add('xfp-labeled');
-          if (!article.querySelector('.xfp-warning-label')) {
-            const warning = document.createElement('div');
-            warning.className = 'xfp-warning-label';
-            warning.innerHTML = `
-              <span>🌴 Hidden by XFeed Paradise: ${vibeLabel.label}</span>
-              <button class="xfp-show-anyway">Show anyway</button>
-            `;
-            warning.querySelector('.xfp-show-anyway').addEventListener('click', (e) => {
-              e.stopPropagation();
-              article.closest('[data-testid="cellInnerDiv"]')?.classList.remove('xfp-labeled');
-              warning.remove();
-              hiddenCount = Math.max(0, hiddenCount - 1);
-            });
-            article.prepend(warning);
-          }
-          break;
-      }
-
-      // Track hidden tweet info if newly hidden
-      if (!wasAlreadyHidden) {
-        hiddenCount++;
-        hiddenTweets.unshift({
-          id: tweet.id,
-          text: tweet.text?.slice(0, 100) + (tweet.text?.length > 100 ? '...' : ''),
-          author: tweet.authorName || tweet.authorId,
-          authorHandle: tweet.authorId,
-          score: score,
-          url: tweet.url,
-          vibeLabel: vibeLabel.label
-        });
-        // Keep only last 50 hidden tweets
-        if (hiddenTweets.length > 50) {
-          hiddenTweets.pop();
+        reprocessVisibleTweets();
+        if (wasCollapsed && !article.hidden && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          card.revealAnimation = article.animate({
+            maxHeight: ['0px', article.getBoundingClientRect().height + 'px'],
+            overflow: ['hidden', 'hidden']
+          }, { duration: 150, easing: 'ease-out' });
         }
+      });
+      card.row = row;
+    }
+    const collapsed = presentation === 'stub';
+    const description = collapsed
+      ? ['Hidden by XFeed Paradise', vibeLabel.label, card.tweet.authorId === 'unknown' ? '' : `@${card.tweet.authorId}`,
+          card.identity.time && relativeTime(card.tweet.timestamp)].filter(Boolean).join(' · ')
+      : presentation === 'revealed' ? 'Shown by you' : 'Below threshold';
+    card.row.dataset.theme = pageTheme;
+    card.row.setAttribute('aria-label', description);
+    setText(card.row.firstElementChild, description);
+    const button = card.row.lastElementChild;
+    button.setAttribute('aria-expanded', String(!collapsed));
+    setText(button, collapsed ? 'Show' : 'Hide');
+    if (card.row.nextElementSibling !== article) article.before(card.row);
+  }
+
+  function clearPresentation(article, card) {
+    card.target?.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-revealed');
+    if (card.hidArticle) {
+      article.hidden = false;
+      article.classList.remove('xfp-content-hidden');
+      card.hidArticle = false;
+    }
+  }
+
+  function clearCard(article, card) {
+    card.revealAnimation?.cancel();
+    clearPresentation(article, card);
+    article.classList.remove('xfp-vibe-position');
+    card.badge?.remove();
+    card.row?.remove();
+    cards.delete(article);
+  }
+
+  function contextLabel() {
+    if (context.kind === 'profile' || context.kind === 'ownProfile') return '@' + context.handle;
+    return { thread: 'Thread', search: 'Search', notifications: 'Notifications', bookmarks: 'Bookmarks' }[context.kind] || 'Feed';
+  }
+
+  function recordFiltered(card, vibeLabel) {
+    const tweet = card.tweet;
+    if (countedIds.has(tweet.id)) return;
+    countedIds.add(tweet.id);
+    hiddenCount++;
+    hiddenTweets.unshift({
+      id: tweet.id,
+      text: tweet.text.slice(0, 100) + (tweet.text.length > 100 ? '...' : ''),
+      authorHandle: tweet.authorId,
+      score: card.score,
+      url: tweet.url,
+      vibeLabel: vibeLabel.label,
+      contextLabel: contextLabel()
+    });
+    if (hiddenTweets.length > 50) hiddenTweets.pop();
+  }
+
+  function applyFilter(article, card, protectedThreadPost, policy) {
+    const settings = VibeFilter.settings;
+    const vibeLabel = VibeFilter.getVibeLabel(card.score);
+    const below = !VibeFilter.shouldShow(card.score);
+    let presentation = 'visible';
+    if (settings.enabled && below && policy !== 'off' && !pageRevealAll &&
+        !protectedThreadPost && !(settings.alwaysShowOwnPosts && card.tweet.isOwn)) {
+      const collapses = settings.filterMode === 'label' || (policy === 'disclose' && settings.filterMode === 'hide');
+      if (revealedIds.has(card.tweet.id)) presentation = collapses ? 'revealed' : 'visible';
+      else if (collapses) presentation = policy === 'disclose' && card.keepVisible ? 'threshold' : 'stub';
+      else if (settings.filterMode === 'dim') presentation = 'dim';
+      else if (settings.filterMode === 'hide') presentation = 'hidden';
+    }
+
+    // Shared cells can contain multiple posts. Keep their siblings independent.
+    const cell = article.closest(selectors.cell);
+    const target = cell?.querySelectorAll(selectors.tweet).length === 1 ? cell : article;
+    if (presentation !== card.presentation || card.target !== target) {
+      clearPresentation(article, card);
+      card.presentation = presentation;
+      card.target = target;
+    }
+
+    if (presentation === 'stub') {
+      if (!article.hidden) {
+        article.hidden = true;
+        card.hidArticle = true;
+        article.classList.add('xfp-content-hidden');
       }
+    }
+    if (presentation === 'dim') target.classList.add('xfp-dimmed');
+    if (presentation === 'hidden') target.classList.add('xfp-hidden');
+
+    if (['stub', 'revealed', 'threshold'].includes(presentation)) {
+      renderStub(article, card, vibeLabel, presentation);
     } else {
-      // Ensure shown tweets are visible
-      const container = article.closest('[data-testid="cellInnerDiv"]');
-      container?.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled');
+      card.row?.remove();
     }
+
+    if (['stub', 'dim', 'hidden'].includes(presentation)) recordFiltered(card, vibeLabel);
+    applyScoreBadge(article, card, vibeLabel);
   }
 
-  // Process a single tweet element - FAST, non-blocking
-  function processTweet(tweetElement) {
-    const article = tweetElement.closest('article[data-testid="tweet"]');
-    if (!article) return;
-
-    // Check if this DOM element already has our marker
-    if (article.dataset.xfpProcessed) {
-      return; // Already processed this exact DOM element
-    }
-
-    const tweet = extractTweetData(tweetElement);
-    if (!tweet) return;
-
-    // Mark this DOM element as processed
-    article.dataset.xfpProcessed = 'true';
-
-    // Also track by ID (for stats)
+  function processTweet(article, identity, tweet) {
+    const card = { identity, tweet };
+    cards.set(article, card);
     processedTweets.add(tweet.id);
-
-    // Get score with AI refinement callback
-    const { score, source } = VibeFilter.getScoreWithRefinement(
-      tweet.id,
-      tweet.text,
-      // Callback when AI score arrives - update the filter
-      (aiScore, aiSource) => {
-        if (article && article.isConnected) {
-          tweet.vibeScore = aiScore;
-          tweet.scoredWithAI = aiSource === 'ai';
-          applyFilter(article, tweet, aiScore);
-          updateFloatingPanel();
-
-          // Update in database
-          const tweetWithAI = { ...tweet, vibeScore: aiScore, scoredWithAI: aiSource === 'ai' };
-          window.tweetDB.saveTweet(tweetWithAI).catch(() => {});
-        }
-      }
-    );
-
-    tweet.vibeScore = score;
-    tweet.scoredWithAI = source === 'ai';
-
-    // Apply filter immediately with initial score
-    applyFilter(article, tweet, score);
-
-    // Save to database (non-blocking)
-    window.tweetDB.saveTweet(tweet).catch(error => {
-      console.error('XFeed Paradise: Error saving tweet:', error);
+    const visit = route;
+    const { score, source } = VibeFilter.getScoreWithRefinement(tweet.id, tweet.text, (aiScore, aiSource) => {
+      if (!VibeFilter.settings.enabled || visit !== routeKey() || cards.get(article) !== card || !article.isConnected ||
+          article.closest(selectors.dialog) || XFPContext.tweetIdentity(article)?.id !== tweet.id ||
+          (article.querySelector(selectors.text)?.textContent || '') !== tweet.text) return;
+      if (XFPContext.policyFor(context, VibeFilter.settings) === 'disclose' &&
+          card.presentation === 'visible' && VibeFilter.shouldShow(card.score) &&
+          !VibeFilter.shouldShow(aiScore) && isInViewport(article)) card.keepVisible = true;
+      card.score = aiScore;
+      window.tweetDB.saveTweet({ ...card.tweet, vibeScore: aiScore, scoredWithAI: aiSource === 'ai' }).catch(() => {});
+      reprocessVisibleTweets();
     });
+    card.score = score;
+    window.tweetDB.saveTweet({ ...tweet, vibeScore: score, scoredWithAI: source === 'ai' }).catch(() => {});
+    return card;
   }
 
-  // Process all visible tweets - non-blocking, fires all at once
-  // Register a tweet with the viewport observer and process if visible
-  function registerTweet(article) {
-    if (!article || article.dataset.xfpObserved) return;
-    article.dataset.xfpObserved = 'true';
-    viewportObserver.observe(article);
-    // Also try to process immediately (in case already in viewport)
-    if (!article.dataset.xfpProcessed) {
-      processTweet(article);
+  let banner = null;
+  let announcementTimer = null;
+  let pageTheme = 'dark';
+
+  function detectTheme() {
+    const rgb = getComputedStyle(document.body).backgroundColor.match(/[\d.]+/g)?.map(Number);
+    if (!rgb || (rgb.length === 4 && rgb[3] === 0)) {
+      return document.documentElement.style.colorScheme === 'light' ? 'light' : 'dark';
     }
+    return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2] > 140 ? 'light' : 'dark';
   }
 
-  function processVisibleTweets() {
-    const tweets = document.querySelectorAll('article[data-testid="tweet"]');
-    tweets.forEach(tweet => registerTweet(tweet));
+  function openWhereToFilter() {
+    const panel = document.querySelector('.xfp-floating-panel');
+    panel.classList.remove('hidden');
+    panel.querySelector('.xfp-floating-dropdown').classList.add('show');
+    panel.querySelector('.xfp-settings-toggle').classList.add('expanded');
+    panel.querySelector('.xfp-settings-content').classList.add('show');
+    panel.querySelector('.xfp-context-settings select').focus();
   }
 
-  // Observe DOM for new tweets
-  function observeTweets() {
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            // Check if the added node contains tweets
-            const tweets = node.querySelectorAll?.('article[data-testid="tweet"]') || [];
-            tweets.forEach(tweet => registerTweet(tweet));
+  function removeBanner() {
+    banner?.remove();
+    banner = null;
+    clearTimeout(announcementTimer);
+    announcementTimer = null;
+  }
 
-            // Also check if the node itself is a tweet
-            if (node.matches?.('article[data-testid="tweet"]')) {
-              registerTweet(node);
-            }
-          }
+  function createBanner() {
+    const row = document.createElement('div');
+    row.className = 'xfp-context-banner';
+    row.dataset.xfpUi = '';
+    const text = document.createElement('span');
+    text.setAttribute('aria-hidden', 'true');
+    const status = document.createElement('span');
+    status.className = 'xfp-visually-hidden';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    const showAll = document.createElement('button');
+    showAll.type = 'button';
+    showAll.textContent = 'Show all';
+    showAll.addEventListener('click', () => {
+      if (route !== routeKey()) return;
+      pageRevealAll = true;
+      reprocessVisibleTweets();
+      banner?.querySelector('button:not([hidden])')?.focus();
+    });
+    const change = document.createElement('button');
+    change.type = 'button';
+    change.addEventListener('click', async () => {
+      if (route !== routeKey() || !Object.hasOwn(XFPContext.policies, context.kind)) return;
+      if (XFPContext.policyFor(context, VibeFilter.settings) === 'off') {
+        openWhereToFilter();
+      } else {
+        try {
+          await XFPContext.savePreference(context.kind, 'off');
+        } catch {
+          showToast('Could not save filter setting.', 'warning');
         }
       }
     });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-
-    return observer;
+    row.append(text, status, showAll, change);
+    return row;
   }
+
+  function renderBanner(primary, policy) {
+    if (!primary || !VibeFilter.settings.enabled || policy === 'normal') {
+      if (banner) removeBanner();
+      return;
+    }
+    const isNew = !banner;
+    banner ||= createBanner();
+    banner.dataset.theme = pageTheme;
+    const timeline = primary.querySelector(selectors.timeline);
+    if (timeline) {
+      if (banner.nextElementSibling !== timeline) timeline.before(banner);
+    } else if (banner.parentElement !== primary) {
+      primary.prepend(banner);
+    }
+
+    const [text, status, showAll, change] = banner.children;
+    const names = {
+      ownProfile: 'your profile', profile: `@${context.handle}’s profile`,
+      bookmarks: 'bookmarks', messages: 'messages', viewer: 'this view',
+      notifications: 'notifications', search: 'search', thread: 'this thread'
+    };
+    const countUnit = context.kind === 'search' ? 'result'
+      : context.kind === 'thread' ? 'reply'
+      : context.kind === 'notifications' && context.tab === 'mentions' ? 'mention' : 'post';
+    const count = pageHidden || pageDimmed;
+    const plural = count === 1 ? countUnit : countUnit === 'reply' ? 'replies' : countUnit + 's';
+    const summary = policy === 'off' ? `Filter paused on ${names[context.kind]}.`
+      : pageRevealAll ? `Showing all on this visit · ${names[context.kind]}`
+      : `${context.kind === 'thread' ? 'You’re in this thread' : 'Filtering ' + names[context.kind]} · ${count} ${plural} ${pageDimmed ? 'dimmed' : 'hidden'}`;
+    const message = '🌴 ' + summary;
+    setText(text, message);
+    if (isNew) setText(status, message);
+    else if (status.textContent !== message && announcementTimer === null) {
+      announcementTimer = setTimeout(() => {
+        setText(status, text.textContent);
+        announcementTimer = null;
+      }, 2000);
+    }
+    showAll.hidden = policy !== 'disclose' || pageRevealAll;
+    change.hidden = !Object.hasOwn(XFPContext.policies, context.kind);
+    const always = { search: 'Always show in search', profile: 'Always show on profiles' }[context.kind] || 'Always show here';
+    setText(change, policy === 'off' ? 'Change' : always);
+  }
+
+  function syncPage(force = false) {
+    const nextRoute = routeKey();
+    const navigated = nextRoute !== route;
+    if (navigated) {
+      route = nextRoute;
+      pageRevealAll = false;
+      pageHidden = 0;
+      pageDimmed = 0;
+      countedIds.clear();
+      removeBanner();
+      for (const [article, card] of cards) clearCard(article, card);
+    }
+
+    const previousViewer = viewer;
+    refreshViewer();
+    const nextContext = XFPContext.classify(location.pathname, location.search, viewer);
+    if (!navigated && previousViewer === viewer && context.kind === 'thread' && nextContext.kind === 'thread') {
+      nextContext.participating ||= context.participating;
+    }
+    if (viewer !== previousViewer) {
+      revealedIds.clear();
+      pageRevealAll = false;
+    }
+
+    const primary = document.querySelector(selectors.primary);
+    const scope = primary || document.querySelector('main') || document.body;
+    const entries = [];
+    if (nextContext.kind !== 'messages') {
+      for (const article of scope.querySelectorAll(selectors.tweet)) {
+        if (article.closest(selectors.dialog) || article.parentElement?.closest(selectors.tweet)) continue;
+        const identity = XFPContext.tweetIdentity(article);
+        if (identity) entries.push({ article, identity, isOwn: XFPContext.isOwn(article, identity, viewer) });
+      }
+    }
+    if (!warnedMissingTweets && location.pathname === '/home' && !entries.length) {
+      warnedMissingTweets = true;
+      console.debug('XFeed Paradise: no recognized home posts yet; waiting for the timeline.');
+    }
+    const focalIndex = nextContext.focalId ? entries.findIndex(entry => entry.identity.id === nextContext.focalId) : -1;
+    if (nextContext.kind === 'thread' && viewer) {
+      nextContext.participating ||= entries.some(entry => entry.identity.author === viewer) ||
+        (focalIndex >= 0 && XFPContext.repliesTo(entries[focalIndex].article, viewer));
+    }
+
+    const contextChanged = context.kind !== nextContext.kind || context.participating !== nextContext.participating;
+    context = nextContext;
+    const policy = XFPContext.policyFor(context, VibeFilter.settings);
+    pageTheme = detectTheme();
+    const live = new Set(entries.map(entry => entry.article));
+    for (const [article, card] of cards) {
+      if (!live.has(article)) clearCard(article, card);
+    }
+
+    const hidden = new Set();
+    const dimmed = new Set();
+    const priorCount = hiddenCount;
+    for (const [index, { article, identity, isOwn }] of entries.entries()) {
+      let card = cards.get(article);
+      const content = article.querySelector(selectors.text)?.textContent || '';
+      if (card && (card.tweet.id !== identity.id || card.tweet.text !== content || card.identity.author !== identity.author)) {
+        clearCard(article, card);
+        card = null;
+      }
+      if (!card && VibeFilter.settings.enabled) {
+        card = processTweet(article, identity, extractTweetData(article, identity, isOwn));
+      }
+      if (!card) continue;
+      card.identity = identity;
+      const postedAt = Date.parse(identity.time?.dateTime);
+      if (Number.isFinite(postedAt)) card.tweet.timestamp = postedAt;
+      card.tweet.isOwn = isOwn;
+      card.tweet.feedOwner = viewer || 'unknown';
+      // If the canonical focal post is missing or virtualized, the order is uncertain.
+      const protectedThreadPost = context.kind === 'thread' && (focalIndex < 0 || index <= focalIndex);
+      applyFilter(article, card, protectedThreadPost, policy);
+      if (card.presentation === 'stub' || card.presentation === 'hidden') hidden.add(identity.id);
+      if (card.presentation === 'dim') dimmed.add(identity.id);
+    }
+    const countsChanged = pageHidden !== hidden.size || pageDimmed !== dimmed.size;
+    pageHidden = hidden.size;
+    pageDimmed = dimmed.size;
+    renderBanner(primary || (scope === document.body ? null : scope), policy);
+    if (force || navigated || contextChanged || countsChanged || priorCount !== hiddenCount) updateFloatingPanel();
+  }
+
+  function reprocessVisibleTweets() {
+    syncPage(true);
+  }
+
+  // History API calls run in X's world. DOM updates and popstate catch most route
+  // changes; a location-only check covers pushState/replaceState with no DOM work.
+  function observeTweets() {
+    const isOwnUI = node => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)
+      ?.closest('[data-xfp-ui], .xfp-floating-panel, .xfp-load-more-container, .xfp-toast');
+    const observer = new MutationObserver(mutations => {
+      if (route !== routeKey() || (banner && !banner.isConnected) || mutations.some(mutation => {
+        if (isOwnUI(mutation.target)) return false;
+        if (mutation.type !== 'childList') return true;
+        return [...mutation.addedNodes, ...mutation.removedNodes].some(node => !isOwnUI(node));
+      })) syncPage();
+    });
+    observer.observe(document.body, {
+      childList: true, subtree: true, characterData: true, attributes: true,
+      attributeFilter: ['href', 'role', 'data-testid', 'datetime']
+    });
+    // Observe style separately so article-level layout changes do not rescan the feed.
+    const themeObserver = new MutationObserver(() => syncPage());
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    window.addEventListener('popstate', () => syncPage());
+    setInterval(() => {
+      if (route !== routeKey()) syncPage();
+    }, 500);
+  }
+
+  XFPContext.watchPreferences(changes => {
+    Object.assign(VibeFilter.settings, XFPContext.applyPreferences(VibeFilter.settings, changes));
+    updateContextSettings(VibeFilter.settings);
+    reprocessVisibleTweets();
+  });
 
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -461,6 +634,7 @@
         processedTweets.clear();
         hiddenCount = 0;
         hiddenTweets.length = 0;
+        revealedIds.clear();
         updateFloatingPanel();
         sendResponse({ success: true });
       }).catch(error => {
@@ -526,28 +700,6 @@
     return true;
   });
 
-  // Reprocess all visible tweets (after settings change)
-  function reprocessVisibleTweets() {
-    const containers = document.querySelectorAll('[data-testid="cellInnerDiv"]');
-    containers.forEach(container => {
-      container.classList.remove('xfp-hidden', 'xfp-dimmed', 'xfp-labeled', 'xfp-revealed');
-      container.querySelector('.xfp-vibe-indicator')?.remove();
-      container.querySelector('.xfp-warning-label')?.remove();
-      // Let processTweet/registerTweet run again for this post.
-      const article = container.querySelector('article[data-testid="tweet"]');
-      if (article) {
-        delete article.dataset.xfpProcessed;
-        delete article.dataset.xfpObserved;
-      }
-    });
-
-    // Reset counts and reprocess
-    processedTweets.clear();
-    hiddenCount = 0;
-    hiddenTweets.length = 0;
-    processVisibleTweets();
-  }
-
   // Create floating panel UI
   function createFloatingPanel() {
     // Remove existing panel if any
@@ -605,6 +757,10 @@
                 <button class="xfp-setting-btn" data-mode="label">Collapse</button>
               </div>
             </div>
+
+            <fieldset class="xfp-context-settings">
+              <legend>Where to filter on X</legend>
+            </fieldset>
 
             <!-- Threshold -->
             <div class="xfp-setting-row">
@@ -669,7 +825,7 @@
             <div class="xfp-setting-row xfp-stats-row">
               <div class="xfp-stat-item">
                 <span class="xfp-stat-value xfp-stat-hidden">0</span>
-                <span class="xfp-stat-label">Hidden</span>
+                <span class="xfp-stat-label">Filtered this session</span>
               </div>
               <div class="xfp-stat-item">
                 <span class="xfp-stat-value xfp-stat-processed">0</span>
@@ -946,6 +1102,7 @@
         processedTweets.clear();
         hiddenCount = 0;
         hiddenTweets.length = 0;
+        revealedIds.clear();
         updateFloatingPanel();
       }
     });
@@ -969,9 +1126,16 @@
 
     // Update badge and hidden count label
     if (badge) {
-      badge.textContent = hiddenCount;
-      badge.style.display = hiddenCount > 0 ? 'flex' : 'none';
+      const count = VibeFilter.settings.enabled && XFPContext.policyFor(context, VibeFilter.settings) !== 'off'
+        ? pageHidden + pageDimmed : 0;
+      badge.textContent = count;
+      badge.style.display = count > 0 ? 'flex' : 'none';
     }
+    const btn = panel.querySelector('.xfp-floating-btn');
+    const paused = VibeFilter.settings.enabled && XFPContext.policyFor(context, VibeFilter.settings) === 'off';
+    btn.classList.toggle('xfp-paused', paused);
+    btn.title = paused ? 'XFeed Paradise · Filter paused here' : 'XFeed Paradise';
+    btn.setAttribute('aria-label', btn.title);
     if (hiddenCountLabel) {
       hiddenCountLabel.textContent = `(${hiddenCount})`;
     }
@@ -1007,6 +1171,7 @@
             <div class="xfp-dropdown-meta">
               <span>${tweet.vibeLabel}</span>
               <span>Score: ${tweet.score}</span>
+              <span>${escapeHtml(tweet.contextLabel)}</span>
             </div>
           </div>
         `).join('');
@@ -1140,7 +1305,7 @@
     if (!container) return;
 
     // Find the timeline container
-    const timeline = document.querySelector('[data-testid="primaryColumn"] section[role="region"]');
+    const timeline = document.querySelector(`${selectors.primary} ${selectors.timeline}`);
     if (!timeline) return;
 
     // Move to end of timeline if not already there
@@ -1157,7 +1322,7 @@
 
     // Observe for timeline to appear and position button
     const timelineObserver = new MutationObserver(() => {
-      const timeline = document.querySelector('[data-testid="primaryColumn"] section[role="region"]');
+      const timeline = document.querySelector(`${selectors.primary} ${selectors.timeline}`);
       if (timeline && loadMoreContainer && !timeline.querySelector('.xfp-load-more-container')) {
         timeline.appendChild(loadMoreContainer);
       }
@@ -1165,7 +1330,7 @@
     timelineObserver.observe(document.body, { childList: true, subtree: true });
 
     // Also try to add immediately
-    const timeline = document.querySelector('[data-testid="primaryColumn"] section[role="region"]');
+    const timeline = document.querySelector(`${selectors.primary} ${selectors.timeline}`);
     if (timeline && loadMoreContainer) {
       timeline.appendChild(loadMoreContainer);
     }
@@ -1174,18 +1339,11 @@
   // Create the floating panel
   const floatingPanel = createFloatingPanel();
 
-  // Update badge whenever hidden count changes (called from applyFilter)
-  const originalHiddenCount = { value: 0 };
-  setInterval(() => {
-    if (originalHiddenCount.value !== hiddenCount) {
-      originalHiddenCount.value = hiddenCount;
-      updateFloatingPanel();
-    }
-  }, 500);
+  const updateContextSettings = XFPContext.mountSettings(
+    floatingPanel.querySelector('.xfp-context-settings'), VibeFilter.settings
+  );
 
-  // Initialize - IntersectionObserver handles fast scrolling, no polling needed
-  console.log('🌴 XFeed Paradise: Starting tweet observation (dual observer mode)...');
-  processVisibleTweets();
+  syncPage(true);
   observeTweets();
 
   // Log stats periodically

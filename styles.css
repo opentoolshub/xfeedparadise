@@ -583,22 +583,129 @@
   filter: grayscale(20%) !important;
 }
 
-/* Labeled/collapsed tweets */
-.xfp-labeled article[data-testid="tweet"] {
-  max-height: 60px !important;
-  overflow: hidden !important;
-  position: relative !important;
+/* In-place disclosures keep the timeline cell mounted. */
+.xfp-content-hidden[hidden] {
+  display: none !important;
 }
 
-.xfp-labeled article[data-testid="tweet"]::after {
-  content: '';
+.xfp-vibe-position {
+  position: relative;
+}
+
+.xfp-context-banner,
+.xfp-stub {
+  --xfp-context-bg: #241e32;
+  --xfp-context-fg: #f2ebff;
+  --xfp-context-line: #9c8eae;
+  --xfp-context-accent: #e1c9ff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 2px 12px;
+  background: var(--xfp-context-bg);
+  color: var(--xfp-context-fg);
+  border: 1px solid var(--xfp-context-line);
+  border-radius: 8px;
+  font: 500 13px/1.4 system-ui, sans-serif;
+}
+
+.xfp-context-banner[data-theme="light"],
+.xfp-stub[data-theme="light"] {
+  --xfp-context-bg: #f6f0ff;
+  --xfp-context-fg: #281d3d;
+  --xfp-context-line: #76618d;
+  --xfp-context-accent: #542880;
+}
+
+.xfp-context-banner {
+  margin: 8px 12px;
+}
+
+.xfp-stub {
+  margin: 2px 12px;
+}
+
+.xfp-context-banner > span:first-child,
+.xfp-stub > span {
+  flex: 1 1 auto;
+}
+
+.xfp-context-banner button,
+.xfp-stub button {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--xfp-context-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--xfp-context-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.xfp-context-banner button[hidden] {
+  display: none;
+}
+
+.xfp-context-banner button:hover,
+.xfp-stub button:hover {
+  text-decoration: underline;
+}
+
+.xfp-context-banner button:focus-visible,
+.xfp-stub button:focus-visible,
+.xfp-context-settings :is(input, select):focus-visible {
+  outline: 2px solid var(--xfp-context-accent, #e1c9ff);
+  outline-offset: 2px;
+}
+
+.xfp-visually-hidden {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 40px;
-  background: linear-gradient(transparent, var(--background-color, #000));
-  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.xfp-floating-btn.xfp-paused {
+  outline: 2px dashed currentColor;
+  outline-offset: 3px;
+}
+
+.xfp-context-settings {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border: 1px solid #76618d;
+  border-radius: 8px;
+}
+
+.xfp-context-settings label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.xfp-context-settings select {
+  background: #242038;
+  color: #f5f2fc;
+  border: 1px solid #77728d;
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+
+@media (hover: none) {
+  .xfp-context-banner button,
+  .xfp-stub button {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* Warning label for labeled mode */
