@@ -67,6 +67,7 @@
   const { selectors } = XFPContext;
   const processedTweets = new Set();
   const cards = new Map();
+  const stubOwners = new WeakMap();
   const revealedIds = new Set();
   const countedIds = new Set();
   const hiddenTweets = [];
@@ -273,6 +274,7 @@
         }
       });
       card.row = row;
+      stubOwners.set(row, article);
     }
     const collapsed = presentation === 'stub';
     const description = collapsed
@@ -372,25 +374,36 @@
   }
 
   function processTweet(article, identity, tweet) {
-    const card = { identity, tweet };
+    const { score, source } = VibeFilter.getScoreWithRefinement(tweet.id, tweet.text);
+    const card = { identity, tweet, score, scoreSource: source };
     cards.set(article, card);
     processedTweets.add(tweet.id);
-    const visit = route;
-    const { score, source } = VibeFilter.getScoreWithRefinement(tweet.id, tweet.text, (aiScore, aiSource) => {
-      if (!VibeFilter.settings.enabled || visit !== routeKey() || cards.get(article) !== card || !article.isConnected ||
-          article.closest(selectors.dialog) || XFPContext.tweetIdentity(article)?.id !== tweet.id ||
-          (article.querySelector(selectors.text)?.textContent || '') !== tweet.text) return;
-      if (XFPContext.policyFor(context, VibeFilter.settings) === 'disclose' &&
-          card.presentation === 'visible' && VibeFilter.shouldShow(card.score) &&
-          !VibeFilter.shouldShow(aiScore) && isInViewport(article)) card.keepVisible = true;
-      card.score = aiScore;
-      window.tweetDB.saveTweet({ ...card.tweet, vibeScore: aiScore, scoredWithAI: aiSource === 'ai' }).catch(() => {});
-      reprocessVisibleTweets();
-    });
-    card.score = score;
-    window.tweetDB.saveTweet({ ...tweet, vibeScore: score, scoredWithAI: source === 'ai' }).catch(() => {});
+    saveCardScore(card);
     return card;
   }
+
+  function saveCardScore(card) {
+    window.tweetDB.saveTweet({
+      ...card.tweet, vibeScore: card.score, scoredWithAI: card.scoreSource === 'ai'
+    }).catch(() => {});
+  }
+
+  function reconcileRefinedScore(article, card, policy) {
+    const cached = VibeFilter.getCachedScore(card.tweet.id, card.tweet.text);
+    if (cached?.source !== 'ai' || (card.scoreSource === 'ai' && card.score === cached.score)) return;
+    if (policy === 'disclose' && card.presentation === 'visible' &&
+        VibeFilter.shouldShow(card.score) && !VibeFilter.shouldShow(cached.score) &&
+        isInViewport(article)) card.keepVisible = true;
+    card.score = cached.score;
+    card.scoreSource = cached.source;
+    saveCardScore(card);
+  }
+
+  // The scorer owns results. On completion, re-read the live route and match
+  // cached results to current cards rather than retaining callbacks on old cards.
+  VibeFilter.onScoreRefined = () => {
+    if (VibeFilter.settings.enabled) syncPage();
+  };
 
   let banner = null;
   let announcementTimer = null;
@@ -573,6 +586,7 @@
       if (Number.isFinite(postedAt)) card.tweet.timestamp = postedAt;
       card.tweet.isOwn = isOwn;
       card.tweet.feedOwner = viewer || 'unknown';
+      if (VibeFilter.settings.enabled) reconcileRefinedScore(article, card, policy);
       // If the canonical focal post is missing or virtualized, the order is uncertain.
       const protectedThreadPost = context.kind === 'thread' && (focalIndex < 0 || index <= focalIndex);
       applyFilter(article, card, protectedThreadPost, policy);
@@ -595,11 +609,20 @@
   function observeTweets() {
     const isOwnUI = node => (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)
       ?.closest('[data-xfp-ui], .xfp-floating-panel, .xfp-load-more-container, .xfp-toast');
+    const lostStub = node => {
+      const article = stubOwners.get(node);
+      const card = cards.get(article);
+      // Intentional removal changes presentation or drops the card before the
+      // observer runs. A row reinserted by us is already back in its slot.
+      return article?.isConnected && card?.row === node &&
+        card.presentation === 'stub' && node.nextElementSibling !== article;
+    };
     const observer = new MutationObserver(mutations => {
       if (route !== routeKey() || (banner && !banner.isConnected) || mutations.some(mutation => {
         if (isOwnUI(mutation.target)) return false;
         if (mutation.type !== 'childList') return true;
-        return [...mutation.addedNodes, ...mutation.removedNodes].some(node => !isOwnUI(node));
+        return [...mutation.removedNodes].some(lostStub) ||
+          [...mutation.addedNodes, ...mutation.removedNodes].some(node => !isOwnUI(node));
       })) syncPage();
     });
     observer.observe(document.body, {

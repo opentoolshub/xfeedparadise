@@ -48,7 +48,14 @@ function setup({ local = {}, sync = {} } = {}) {
     runtime: {
       getManifest: () => ({ version: '1.5.0' }),
       onMessage: { addListener(fn) { messages.push(fn); } },
-      sendMessage: async () => { throw Error('Unexpected scoring call'); }
+      async sendMessage(message) {
+        if (message.type !== 'XFP_SCORE_BATCH') throw Error('Unexpected scoring call');
+        const scores = await Promise.all(message.texts.map(text => {
+          if (!text.startsWith('fixture-delay')) return null;
+          return new Promise(resolve => (window.pendingScores[text] ||= []).push(resolve));
+        }));
+        return { scores, provider: 'fixture', providerName: 'Fixture' };
+      }
     },
     tabs: { query: async () => [] }
   };
@@ -81,16 +88,6 @@ async function fixture(browser, { host = 'x.com', route = '/home', posts = '', n
   for (const file of ['mobile.js', 'providers.js', 'filter.js', 'page-context.js']) {
     await page.addScriptTag({ content: read(file) });
   }
-  await page.addScriptTag({ content: `
-    const scorePost = VibeFilter.getScoreWithRefinement.bind(VibeFilter);
-    VibeFilter.getScoreWithRefinement = (id, text, callback) => {
-      if (text === 'fixture-delay') {
-        (pendingScores[id] ||= []).push(callback);
-        return { score: 40, source: 'keyword' };
-      }
-      return scorePost(id, text, callback);
-    };
-  ` });
   await page.addScriptTag({ content: read('content.js') });
   await page.locator('.xfp-floating-panel').waitFor({ state: 'attached' });
 
@@ -239,8 +236,9 @@ async function browsingAndParticipation(browser) {
 async function overridesAndLateScores(browser) {
   const f = await fixture(browser, {
     host: 'twitter.com', route: '/search?q=first', background: '#15202b', touch: true,
-    posts: post(31, 'another') + post(32, 'another', { text: 'fixture-delay' }) +
-      '<div style="height:1200px"></div>' + post(33, 'another', { text: 'fixture-delay' })
+    sync: { vibeFilterSettings: { useAI: true, showScores: true } },
+    posts: post(31, 'another') + post(32, 'another', { text: 'fixture-delay-32' }) +
+      '<div style="height:1200px"></div>' + post(33, 'another', { text: 'fixture-delay-33' })
   });
   const { page, check, settings, navigate, add, state, banner } = f;
   await state(31, 'stub');
@@ -258,9 +256,10 @@ async function overridesAndLateScores(browser) {
   await page.keyboard.press('Enter');
   await state(31, 'shown');
 
+  await check(() => pendingScores['fixture-delay-32']?.length && pendingScores['fixture-delay-33']?.length);
   await page.evaluate(() => {
-    pendingScores['32'][0](-70, 'ai');
-    pendingScores['33'][0](-70, 'ai');
+    pendingScores['fixture-delay-32'][0](-82);
+    pendingScores['fixture-delay-33'][0](-82);
   });
   await state(32, 'threshold');
   await state(33, 'stub');
@@ -283,7 +282,7 @@ async function overridesAndLateScores(browser) {
   await add(post(34, 'newpost'));
   await state(34, 'visible');
   await navigate('/search?q=second');
-  await banner('1 result hidden');
+  await banner('3 results hidden');
   await state(31, 'shown');
   await state(34, 'stub');
   await page.getByRole('button', { name: 'Always show in search' }).click();
@@ -311,12 +310,103 @@ async function overridesAndLateScores(browser) {
 
   await navigate('/search?q=late', post(36, 'another', { text: 'fixture-delay' }));
   await state(36, 'visible');
-  await check(() => !!window.pendingScores['36']?.length);
+  await check(() => !!window.pendingScores['fixture-delay']?.length);
   await navigate('/i/bookmarks', post(36, 'another') + post(37, 'another'));
   await banner('Filter paused on bookmarks');
-  await page.evaluate(() => pendingScores['36'][0](-95, 'ai'));
+  await page.evaluate(() => pendingScores['fixture-delay'][0](-95));
+  await check(() => !VibeFilter.batchProcessing);
   await state(36, 'visible');
   await check(() => !document.querySelector('#p36 .xfp-vibe-indicator').textContent.includes('-95'));
+  return f.close();
+}
+
+async function refinementHandoff(browser) {
+  const pendingNav = post(51, 'another', { text: 'fixture-delay-route' });
+  const f = await fixture(browser, {
+    sync: { vibeFilterSettings: { useAI: true, showScores: true } },
+    posts: pendingNav
+  });
+  const { page, check, settings, navigate, add, state } = f;
+  const waitForRequest = text => check(text => pendingScores[text]?.length === 1, text);
+  const resolve = (text, score = -85) => page.evaluate(({ text, score }) => pendingScores[text][0](score), { text, score });
+
+  // Replace a pending card across routes. One transport result belongs to
+  // the new eligible card with the same ID and text.
+  await waitForRequest('fixture-delay-route');
+  await navigate('/explore', pendingNav);
+  await check(() => writes.filter(tweet => tweet.id === '51').length === 2);
+  await resolve('fixture-delay-route');
+  await state(51, 'hidden');
+  await check(() => pendingScores['fixture-delay-route'].length === 1 &&
+    writes.filter(tweet => tweet.id === '51' && tweet.scoredWithAI).length === 1);
+
+  // Recycle a node to another post on the same route, with the original
+  // pending post mounted in a new cell.
+  const pendingRecycle = post(52, 'another', { text: 'fixture-delay-recycle' });
+  await add(pendingRecycle);
+  await waitForRequest('fixture-delay-recycle');
+  await page.evaluate(post => {
+    const article = document.querySelector('#p52');
+    article.id = 'p53';
+    article.querySelector('a[href*="/status/"]').href = '/another/status/53';
+    article.querySelector('[data-testid="tweetText"]').textContent = 'Wonderful progress';
+    document.querySelector('#posts').insertAdjacentHTML('beforeend', post);
+  }, pendingRecycle.replace('id="cell52"', 'id="replacement52"'));
+  await check(() => writes.filter(tweet => tweet.id === '52').length === 2);
+  await resolve('fixture-delay-recycle');
+  await state(52, 'hidden');
+  await state(53, 'visible');
+  await check(() => !writes.some(tweet => tweet.id === '53' && tweet.scoredWithAI));
+
+  // A late result cannot apply to changed text even when the ID is unchanged.
+  await add(post(54, 'another', { text: 'fixture-delay-old-text' }));
+  await waitForRequest('fixture-delay-old-text');
+  await page.evaluate(() => {
+    document.querySelector('#p54 [data-testid="tweetText"]').textContent = 'Wonderful progress';
+  });
+  await check(() => writes.some(tweet => tweet.id === '54' && tweet.text === 'Wonderful progress'));
+  await resolve('fixture-delay-old-text');
+  await check(() => !VibeFilter.batchProcessing);
+  await state(54, 'visible');
+  await check(() => !writes.some(tweet => tweet.id === '54' && tweet.scoredWithAI));
+
+  // Cache the finished request while filtering is off, then reconcile it
+  // into the same mounted card when filtering is enabled again.
+  await add(post(55, 'another', { text: 'fixture-delay-disabled' }));
+  await waitForRequest('fixture-delay-disabled');
+  await settings({ enabled: false });
+  await resolve('fixture-delay-disabled');
+  await check(() => !VibeFilter.batchProcessing && !writes.some(tweet => tweet.id === '55' && tweet.scoredWithAI));
+  await state(55, 'visible');
+  await settings({ enabled: true });
+  await state(55, 'hidden');
+  await check(() => writes.filter(tweet => tweet.id === '55' && tweet.scoredWithAI).length === 1);
+  return f.close();
+}
+
+async function isolatedStubRemoval(browser) {
+  const f = await fixture(browser, { route: '/search?q=stub', posts: post(56, 'another') });
+  const { page, check, state, settings, banner } = f;
+  await state(56, 'stub');
+  await banner('1 result hidden');
+  // Let initialization finish. Then remove just the row, with no navigation,
+  // settings change, or non-extension mutation to trigger a rescan.
+  await page.locator('.xfp-load-more-container').waitFor({ state: 'attached' });
+  await page.evaluate(() => {
+    window.originalPost = document.querySelector('#p56');
+    window.originalPost.previousElementSibling.remove();
+  });
+  await check(() => {
+    const article = document.querySelector('#p56');
+    return article === window.originalPost && article.hidden &&
+      article.previousElementSibling?.querySelector('button')?.ariaExpanded === 'false' &&
+      document.querySelectorAll('.xfp-stub').length === 1;
+  });
+  await page.getByRole('button', { name: 'Show', exact: true }).click();
+  await state(56, 'shown');
+  await settings({ enabled: false });
+  await state(56, 'visible');
+  await check(() => !document.querySelector('.xfp-stub'));
   return f.close();
 }
 
@@ -388,7 +478,8 @@ async function popupPreferences(browser) {
   });
   try {
     const checks = await browsingAndParticipation(browser) + await overridesAndLateScores(browser) +
-      await identityFallbacks(browser) + await popupPreferences(browser);
+      await identityFallbacks(browser) + await popupPreferences(browser) +
+      await refinementHandoff(browser) + await isolatedStubRemoval(browser);
     console.log(`PASS: ${checks} sandboxed Chrome fixture checks, plus keyboard, settings and zero page errors`);
   } finally {
     await browser.close();
