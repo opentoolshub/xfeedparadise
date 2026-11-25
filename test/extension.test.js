@@ -106,10 +106,15 @@ test('manifest keeps Groq required and other providers optional', () => {
     assert.equal(manifest.host_permissions.includes(origin), false, origin);
   }
   for (const script of manifest.content_scripts) {
+    if (script.js.includes('content-instagram.js')) {
+      assert.deepEqual(script.js, ['mobile.js', 'content-instagram.js']);
+      continue;
+    }
+    assert.ok(script.js.includes('providers.js'));
     assert.ok(script.js.indexOf('providers.js') < script.js.indexOf('filter.js'));
   }
   // Content scripts never call provider APIs directly; only the worker does.
-  for (const file of ['filter.js', 'content.js', 'content-googlenews.js']) {
+  for (const file of ['filter.js', 'content.js', 'content-googlenews.js', 'content-instagram.js']) {
     assert.doesNotMatch(read(file), /\bfetch\s*\(/, file);
   }
 });

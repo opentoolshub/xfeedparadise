@@ -129,6 +129,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     googleNewsToggle.checked = result.xfp_google_news_enabled !== false;
   });
 
+  const instagramMode = document.getElementById('instagramHomeMode');
+  const instagramSettings = await chrome.storage.sync.get('instagramHomeMode');
+  instagramMode.value = instagramSettings.instagramHomeMode || 'off';
+  instagramMode.addEventListener('change', () => {
+    chrome.storage.sync.set({ instagramHomeMode: instagramMode.value });
+  });
+
   // Save Twitter setting
   twitterToggle.addEventListener('change', async (e) => {
     await chrome.storage.sync.set({ xfp_twitter_enabled: e.target.checked });

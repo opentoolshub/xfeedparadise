@@ -208,3 +208,13 @@ scoring settings. Secretary controls are disabled on X messaging routes and in
 incognito tabs; this does not claim changes to legacy scoring/messaging behavior.
 Safari resource assembly is tested, but actual Safari/iOS storage quotas, private
 browsing, live layouts and lifecycle need device validation before distribution.
+
+### Instagram Home (1.6)
+
+In the toolbar popup open **Settings & Stats → Enabled Sites → Instagram Home**.
+Choose **Hide all Home posts** for a quiet Home timeline, or **Hide suggested
+posts** for posts with a recognized English “Suggested for you” header. Select
+**Off** to restore the feed. The default is Off. On iPhone, allow the extension
+on instagram.com in Safari. These modes operate on Home feed articles and do
+not score, collect or export Instagram content. Open a profile, permalink,
+Explore, Reels or Messages to use that surface normally.

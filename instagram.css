@@ -1,0 +1,4 @@
+:root[data-xfp-instagram-home="all"] :is(main, [role="main"]) article:not(dialog *, [role="dialog"] *, :has(dialog, [role="dialog"])),
+:root[data-xfp-instagram-home="suggested"] :is(main, [role="main"]) article[data-xfp-instagram-suggested]:not(dialog *, [role="dialog"] *, :has(dialog, [role="dialog"])) {
+  display: none !important;
+}

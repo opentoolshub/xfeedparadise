@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XFeed Paradise",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "AI-powered feed filter that surfaces uplifting content and hides outrage-bait",
   "homepage_url": "https://github.com/opentoolshub/xfeedparadise",
   "permissions": [
@@ -74,6 +74,20 @@
         "secretary.css"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*",
+        "https://instagram.com/*"
+      ],
+      "js": [
+        "mobile.js",
+        "content-instagram.js"
+      ],
+      "run_at": "document_idle",
+      "css": [
+        "instagram.css"
+      ]
     }
   ],
   "background": {
