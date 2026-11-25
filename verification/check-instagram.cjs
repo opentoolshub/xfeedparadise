@@ -50,6 +50,23 @@ const root = path.resolve(__dirname, '..');
     assert.ok(await visible('#friend'));
     await mode('off');
     assert.ok(await visible('#pick'));
+    // Simulate Safari without Navigation API events and a suspended animation
+    // frame. A route-only change must still restore the direct-message surface.
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'navigation', { value: undefined });
+      window.requestAnimationFrame = () => 0;
+      window.chrome = { storage: {
+        sync: { get: async () => ({ instagramHomeMode: 'all' }) },
+        onChanged: { addListener() {} },
+      } };
+    });
+    await page.reload();
+    await page.addStyleTag({ path: path.join(root, 'instagram.css') });
+    await page.addScriptTag({ path: path.join(root, 'content-instagram.js') });
+    assert.equal(await visible('#friend'), false);
+    await page.evaluate(() => history.pushState({}, '', '/direct/inbox/'));
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('#friend')).display !== 'none',
+      undefined, { polling: 50, timeout: 3000 });
     console.log('Instagram Home modes, reused cards, master switch, dialogs and routes passed.');
   } finally {
     await browser.close();
