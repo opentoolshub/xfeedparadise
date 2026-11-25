@@ -6,10 +6,13 @@
   let mode = 'off';
   let enabled = true;
   let scheduled = false;
+  let lastPath;
+  let routeTimer;
 
   function refresh() {
     scheduled = false;
-    const home = enabled && location.pathname === '/' && ['all', 'suggested'].includes(mode);
+    lastPath = location.pathname;
+    const home = enabled && lastPath === '/' && ['all', 'suggested'].includes(mode);
     if (!home) {
       document.documentElement.removeAttribute(rootMode);
       return;
@@ -29,7 +32,11 @@
   }
 
   function schedule() {
-    if (scheduled) return;
+    if (location.pathname !== lastPath) {
+      refresh();
+      return;
+    }
+    if (mode !== 'suggested' || lastPath !== '/' || scheduled) return;
     scheduled = true;
     requestAnimationFrame(refresh);
   }
@@ -37,7 +44,12 @@
   const observer = new MutationObserver(schedule);
   function configure() {
     observer.disconnect();
+    clearInterval(routeTimer);
     if (enabled && ['all', 'suggested'].includes(mode)) {
+      // Older WebKit can change routes without a navigation event or DOM edit.
+      routeTimer = setInterval(() => {
+        if (location.pathname !== lastPath) refresh();
+      }, 250);
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
     }
     refresh();
