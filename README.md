@@ -214,7 +214,7 @@ browsing, live layouts and lifecycle need device validation before distribution.
 In the toolbar popup open **Settings & Stats → Enabled Sites → Instagram Home**.
 Choose **Hide all Home posts** for a quiet Home timeline, or **Hide suggested
 posts** for posts with a recognized English “Suggested for you” header. Select
-**Off** to restore the feed. The default is Off. On iPhone, allow the extension
+**Off** to restore the feed. The default is **Hide suggested posts**. On iPhone, allow the extension
 on instagram.com in Safari. These modes operate on Home feed articles and do
 not score, collect or export Instagram content. Open a profile, permalink,
 Explore, Reels or Messages to use that surface normally.

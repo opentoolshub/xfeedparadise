@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const instagramMode = document.getElementById('instagramHomeMode');
   const instagramSettings = await chrome.storage.sync.get('instagramHomeMode');
-  instagramMode.value = instagramSettings.instagramHomeMode || 'off';
+  instagramMode.value = instagramSettings.instagramHomeMode ?? 'suggested';
   instagramMode.addEventListener('change', () => {
     chrome.storage.sync.set({ instagramHomeMode: instagramMode.value });
   });

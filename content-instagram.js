@@ -63,7 +63,7 @@
     const current = ++revision;
     const settings = await chrome.storage.sync.get(['instagramHomeMode', 'vibeFilterSettings']);
     if (current !== revision) return;
-    mode = settings.instagramHomeMode;
+    mode = settings.instagramHomeMode ?? 'suggested';
     enabled = settings.vibeFilterSettings?.enabled !== false;
     configure();
   }

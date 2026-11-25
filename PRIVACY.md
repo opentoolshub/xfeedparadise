@@ -1,6 +1,6 @@
 # Privacy Policy for XFeed Paradise
 
-**Last Updated:** November 24, 2026 (v1.6.0)
+**Last Updated:** November 24, 2026 (v1.6.1)
 
 ## Overview
 
@@ -15,7 +15,7 @@ XFeed Paradise is a browser extension that filters your social media feeds to su
 
 ### Instagram Home
 
-The Instagram setting is off by default. When enabled, the extension changes
+Instagram Home defaults to hiding recognized suggested posts. When enabled, the extension changes
 the visibility of Home feed articles in your browser. Suggested-post mode reads
 recommendation labels in article headers. Only the filter preference is saved.
 Instagram post text, links and account information stay out of the extension’s

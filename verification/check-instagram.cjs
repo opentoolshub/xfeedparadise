@@ -31,7 +31,12 @@ const root = path.resolve(__dirname, '..');
         changed({ instagramHomeMode: {} }, 'sync');
       }, [value, enabled]);
     }
-    assert.ok(await visible('#pick'));
+    assert.equal(await visible('#pick'), false, 'default hides a suggested article');
+    assert.ok(await visible('#friend'));
+    await mode('off');
+    assert.ok(await visible('#pick'), 'explicit Off overrides the default');
+    await mode(undefined, false);
+    assert.ok(await visible('#pick'), 'master switch overrides the default');
     await mode('suggested');
     assert.equal(await visible('#pick'), false);
     assert.ok(await visible('#friend'));
